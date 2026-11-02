@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<!-- 由 _dev/build.mjs 生成于 2026/11/3 02:29:27；源码分片见 _dev/src/ -->
+<!-- 由 _dev/build.mjs 生成于 2026/11/3 02:55:08；源码分片见 _dev/src/ -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>烛焰温度场仿真 · 参考答案版</title>
@@ -1212,7 +1212,7 @@ var 烛焰仿真 = (function () {
     var 出上 = 0, 出下 = 0, 出内 = 0, 出外 = 0;
     function 累加出(流) {
       var 烟 = 流[1 + 组分.CS];
-      var 份额 = 1;   // 气体输运照常；烟炱随后由 烟炱净流搬运() 覆盖
+      var 份额 = p.烟炱只随对流 ? 0 : 1;   // 开启时①不搬烟炱，全部交给 ③b 的净流搬运，避免走两遍
       组分出[组分.CS] += 烟 * 份额;
       for (var k = 0; k < 组分数; k++) if (k !== 组分.CS) 组分出[k] += 流[1 + k];
       return 流[0];                                    // 总量不受烟炱份额影响
@@ -1228,7 +1228,7 @@ var 烛焰仿真 = (function () {
     var 入上 = 0, 入下 = 0, 入内 = 0, 入外 = 0;
     function 累加入(流) {
       var 烟 = 流[1 + 组分.CS];
-      var 份额 = 1;   // 气体输运照常；烟炱随后由 烟炱净流搬运() 覆盖
+      var 份额 = p.烟炱只随对流 ? 0 : 1;   // 开启时①不搬烟炱，全部交给 ③b 的净流搬运，避免走两遍
       组分入[组分.CS] += 烟 * 份额;
       for (var k = 0; k < 组分数; k++) if (k !== 组分.CS) 组分入[k] += 流[1 + k];
       return 流[0] - 烟 + 烟 * 份额;
