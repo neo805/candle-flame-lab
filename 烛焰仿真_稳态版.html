@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<!-- 由 _dev/build.mjs 生成于 2026/11/3 02:55:08；源码分片见 _dev/src/ -->
+<!-- 由 _dev/build.mjs 生成于 2026/11/3 03:29:23；源码分片见 _dev/src/ -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>烛焰温度场仿真 · 稳态优化版</title>
@@ -529,6 +529,7 @@ var 烛焰仿真 = (function () {
     if (基准.灯芯蒸发系数 !== undefined) p.灯芯蒸发系数 = 基准.灯芯蒸发系数;
     if (基准.烛芯下限温度 !== undefined) p.烛芯下限温度 = 基准.烛芯下限温度;
     if (基准.启用蜡蒸气饱和 !== undefined) p.启用蜡蒸气饱和 = !!基准.启用蜡蒸气饱和;
+    if (基准.T_Cal_max !== undefined) p.T_Cal_max = 基准.T_Cal_max;
     if (基准.启用物理速度 !== undefined) p.启用物理速度 = !!基准.启用物理速度;
     if (基准.边界跟随温度 !== undefined) p.边界跟随温度 = !!基准.边界跟随温度;
     if (基准.烟炱只随对流 !== undefined) p.烟炱只随对流 = !!基准.烟炱只随对流;
@@ -1928,7 +1929,7 @@ var 渲染 = (function () {
     外区增长: 1.25,
     /* 显示窗口：仍为原版视野 */
     观察窗半径mm: 12,
-    观察窗上mm: 38,
+    观察窗上mm: 30,
     观察窗下mm: 4,
 
     /* 1D 固体灯芯（亚网格模型） */
@@ -1961,6 +1962,7 @@ var 渲染 = (function () {
     烟炱只随对流: true,      // 烟炱是固体：不自扩散，只随气体净流搬运
 
     最大迭代步数: 8000,
+    T_Cal_max: 2700,         // 实测无钳位真实峰值 2702K，故取 2700：既不再削峰，也不越出 Cp 拟合区间
     收敛阈值: 10.0
   };
 
@@ -1996,8 +1998,8 @@ var 渲染 = (function () {
   }
 
   /* -------------------------------------------------------------- 色标刻度 */
-  var 温度刻度 = [300, 500, 700, 900, 1100, 1300, 1500, 1700, 1900].map(function (v) {
-    return { t: 色标库.线性(v, 300, 2100), 文字: String(v) };
+  var 温度刻度 = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000].map(function (v) {
+    return { t: 色标库.线性(v, 300, 3000), 文字: String(v) };
   });
   var 组分刻度 = [1e-10, 1e-8, 1e-6, 1e-4, 1e-2].map(function (v) {
     return { t: 色标库.对数(v, 1e-10, 1e-2), 文字: v.toExponential(0).replace("e-", "e−") };
@@ -2010,7 +2012,7 @@ var 渲染 = (function () {
     var 温度映射 = function (场) {
       return {
         数据: 场.T, 色标: "烛焰",
-        归一化: function (v) { return 色标库.线性(v, 300, 2100); }
+        归一化: function (v) { return 色标库.线性(v, 300, 3000); }
       };
     };
     function 组分(id, 名, 下标, 色标) {

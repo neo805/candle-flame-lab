@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<!-- 由 _dev/build.mjs 生成于 2026/11/3 02:55:08；源码分片见 _dev/src/ -->
+<!-- 由 _dev/build.mjs 生成于 2026/11/3 03:29:23；源码分片见 _dev/src/ -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>烛焰温度场仿真 · 参考答案版</title>
@@ -529,6 +529,7 @@ var 烛焰仿真 = (function () {
     if (基准.灯芯蒸发系数 !== undefined) p.灯芯蒸发系数 = 基准.灯芯蒸发系数;
     if (基准.烛芯下限温度 !== undefined) p.烛芯下限温度 = 基准.烛芯下限温度;
     if (基准.启用蜡蒸气饱和 !== undefined) p.启用蜡蒸气饱和 = !!基准.启用蜡蒸气饱和;
+    if (基准.T_Cal_max !== undefined) p.T_Cal_max = 基准.T_Cal_max;
     if (基准.启用物理速度 !== undefined) p.启用物理速度 = !!基准.启用物理速度;
     if (基准.边界跟随温度 !== undefined) p.边界跟随温度 = !!基准.边界跟随温度;
     if (基准.烟炱只随对流 !== undefined) p.烟炱只随对流 = !!基准.烟炱只随对流;
