@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<!-- 由 _dev/build.mjs 生成于 2026/11/3 03:29:23；源码分片见 _dev/src/ -->
+<!-- 由 _dev/build.mjs 生成于 2026/11/3 03:44:15；源码分片见 _dev/src/ -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>烛焰温度场仿真 · 稳态优化版</title>
@@ -2015,14 +2015,22 @@ var 渲染 = (function () {
         归一化: function (v) { return 色标库.线性(v, 300, 3000); }
       };
     };
-    function 组分(id, 名, 下标, 色标) {
+    function 组分(id, 名, 下标, 色标, 下限, 上限) {
+      var 低 = 下限 || 1e-10, 高 = 上限 || 1e-2;
+      /* 刻度：按量程均分成 6 段的对数刻度 */
+      var 刻 = [];
+      var 启动 = Math.log10(低), 跨度 = Math.log10(高) - 启动;
+      for (var q = 0; q <= 6; q++) {
+        var v = Math.pow(10, 启动 + 跨度 * q / 6);
+        刻.push({ t: 色标库.对数(v, 低, 高), 文字: v.toExponential(0).replace("e-", "e−").replace("e+", "e") });
+      }
       return {
         画布: document.getElementById(id), 环境: 环境, 标题: 名 + " 摩尔分数",
-        色标: 色标, 色标单位: "—", 色标刻度: 组分刻度,
+        色标: 色标, 色标单位: "—", 色标刻度: 刻,
         映射: function (场) {
           return {
             数据: 场.组分场[下标], 色标: 色标,
-            归一化: function (v) { return 色标库.对数(v, 1e-10, 1e-2); }
+            归一化: function (v) { return 色标库.对数(v, 低, 高); }
           };
         },
         等比: true
@@ -2072,7 +2080,7 @@ var 渲染 = (function () {
       },
       C25H52G: 组分("cv-C25H52G", "C₂₅H₅₂(g)", 6, "Oranges"),
       C2H2: 组分("cv-C2H2", "C₂H₂", 2, "YlOrRd"),
-      CS: 组分("cv-CS", "C(s) 烟炱", 8, "Greys")
+      CS: 组分("cv-CS", "C(s) 烟炱", 8, "Greys", 1e-13, 1e-1)
     };
     for (var k in 面板定义) if (Object.prototype.hasOwnProperty.call(面板定义, k)) {
       面板[k] = 渲染.创建面板(面板定义[k].画布, 面板定义[k]);
