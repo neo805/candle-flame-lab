@@ -479,6 +479,10 @@ body {
 .阈值式 { flex: 1; min-width: 64px; color: #3d4852; white-space: nowrap; }
 .阈值值 { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; color: #2f3742; }
 
+/* 自检读数：与运行读数同区，稍作区分 */
+.读数组-自检 { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #dfe4ea; }
+.读数项-自检 .读数值 { color: #2b6c8f; }
+
 </style>
 </head>
 <body>
@@ -514,6 +518,10 @@ body {
         <div class="读数项"><span class="读数名">最高温度</span><span class="读数值" id="信息-温度">—</span></div>
         <div class="读数项"><span class="读数名">最大 ΔT</span><span class="读数值" id="信息-温差">—</span></div>
         <div class="读数项"><span class="读数名">单步耗时</span><span class="读数值 读数值-小" id="信息-耗时">—</span></div>
+    </div>
+    <div class="读数组 读数组-自检">
+      <div class="读数项 读数项-自检"><span class="读数名">单位耗氧放热</span><span class="读数值 读数值-小" id="信息-放热">—</span></div>
+      <div class="读数项 读数项-自检"><span class="读数名">质量漂移</span><span class="读数值 读数值-小" id="信息-漂移">—</span></div>
       </div>
       <div class="进度槽"><div class="进度条" id="进度条"></div></div>
       <div class="徽标 徽标-待机" id="信息-状态">待开始</div>
@@ -659,7 +667,6 @@ var 烛焰仿真 = (function () {
 
       /* 化学反应：每行一个反应，列序 = [N2,O2,C2H2,H2,H2O,CO2,C25H52(g),C25H52(l),C(s)] */
       反应温度阈值: [573.0, 673.0, 773.0, 823.0, 973.0, 1373.0],
-      反应焓变: [-1255500.0, 100000.0, 3391800.0, -483600.0, -393500.0, -226700.0],
       /* 反应松弛系数 γ：每一步只让 γ 比例的可用反应物参与反应。
        * 1.0 = 原行为（达到阈值即完全反应）；<1 = 有限速率，避免"攒够了再爆燃"的弛豫振荡。
        * 注意：它只改变每步的推进量，不改变平衡点（稳态的放热率仍等于流入速率）。 */
@@ -669,6 +676,8 @@ var 烛焰仿真 = (function () {
        * 1.0 = 原行为；<1 = 阻尼不动点迭代，抑制"一步爆燃"引起的温度跳变。
        * 不动点不变（收敛时绝热温度＝旧温度，松弛因子自动失效）。 */
       化学欠松弛: 1.0,
+      /*<<TASK1_START>>*/
+      反应焓变: [-1255500.0, 100000.0, 3391800.0, -483600.0, -393500.0, -226700.0],
       计量数矩阵: [
         [0, -2.5, -1.0, 0, 1.0, 2.0, 0, 0, 0],          // R1 C2H2 + 2.5O2 → 2CO2 + H2O
         [0, 0, 0, 0, 0, 0, 1.0, -1.0, 0],               // R2 C25H52(l) → C25H52(g)
@@ -677,6 +686,7 @@ var 烛焰仿真 = (function () {
         [0, -1.0, 0, 0, 0, 1.0, 0, 0, -1.0],            // R5 C(s) + O2 → CO2
         [0, 0, -1.0, 1.0, 0, 0, 0, 0, 2.0]              // R6 C2H2 → 2C(s) + H2
       ],
+      /*<<TASK1_END>>*/
 
       /* 等压摩尔热容 Cp = A + B·T + C·T² + D·T³  [J/(mol·K)]
        * 修正版：H2 原系数在 T>1725K 会给出负热容（Cp(2500K)=−77.6），
@@ -933,7 +943,10 @@ var 烛焰仿真 = (function () {
     var K = p.启用物理速度 ? (p.物理时间步 / p.dx) : p.速度流量系数;   // 物理速度：本步被气流带走的比例 = v·Δt/dx
     var n = nx - 1 - 从gx;                        // 当前网格到对称轴的列数
 
-    var 权内 = p.内权[从gx], 权外 = p.外权[从gx];
+    var r内 = p.列内半径[从gx], r外 = p.列外半径[从gx];
+    /*<<TASK2_START>>*/
+    var 权内 = 2 * r内 / (r内 + r外);
+    var 权外 = 2 * r外 / (r内 + r外);
     var 几何和 = 2.0 + 权内 + 权外;                       // 均匀网格时恒为 4
     var 权重和 = 几何和 + 向上修正 - 向下修正 + K * (Math.abs(v轴向) + Math.abs(v径向));
     if (权重和 <= 0) {
@@ -959,6 +972,7 @@ var 烛焰仿真 = (function () {
       几何项 = 权外; 附加项 = K * Math.max(v径向, 0);
       w = (几何项 + 附加项) / 权重和;
     }
+    /*<<TASK2_END>>*/
 
     var 流量 = n气 * p.气体扩散系数 * 4.0 * w;
     out[0] = 流量;
@@ -989,6 +1003,10 @@ var 烛焰仿真 = (function () {
       ny: ny,
       单元数: N,
       步数: 0,
+      累计放热: 0,        // J（放热为负）
+      累计耗氧: 0,        // mol（R1/R4/R5 消耗的 O₂ 总量）
+      质量漂移: 0,        // 每步气相总量相对变化（%）
+      _上步总气: -1,
       收敛: false,
       最大温度: 0,
       最大温差: 0,
@@ -1229,7 +1247,7 @@ var 烛焰仿真 = (function () {
         }
       }
       if (Fp === 0) break;
-      var T新 = T - F / Fp;
+    var T新 = T - F / Fp;
       if (!isFinite(T新)) break;                     // 【改进】防护：非有限值不写入
       T新 = 钳位(T新, p.T_ref, p.T_Cal_max);
       if (Math.abs(T新 - T) < 1.0) return T新;        // 收敛容差 1 K
@@ -1502,9 +1520,11 @@ var 烛焰仿真 = (function () {
         var 行 = p.计量数矩阵[r];
         for (i = 0; i < 组分数; i++) if (行[i] !== 0) 后[i] += 行[i] * e;
         总焓变 += p.反应焓变[r] * e;
+        var 氧行 = 行[组分.O2]; if (氧行 < 0) sim.累计耗氧 -= 氧行 * e;   // 本反应消耗的 O₂
       }
     }
 
+    sim.累计放热 += 总焓变;
     var T新 = 求解绝热平衡温度(sim, 前, 后, T, 总焓变);
     /* 灯芯里蜡从环境温度被烤到蒸发温度所需的显热，同样取自本格，保证能量守恒 */
     if (是烛芯 && p.灯芯蒸发系数 > 0 && 进度[1] > 0) {
@@ -1688,6 +1708,7 @@ var 烛焰仿真 = (function () {
     /* ⓪b 边界幽灵格跟随内格温度（消除虚假质量源） */
     边界刷新(sim, cur);
 
+    /*<<TASK3_START>>*/
     /* ① 气体扩散与传输 */
     nxt.set(cur);
     for (gy = 1; gy < ny - 1; gy++)
@@ -1707,6 +1728,7 @@ var 烛焰仿真 = (function () {
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
         网格化学反应(sim, gx, gy);
+    /*<<TASK3_END>>*/
 
     /* ③b 烟炱按气体净流搬运（不自扩散） */
     烟炱净流搬运(sim, nxt);
@@ -2721,6 +2743,8 @@ var 参数面板 = (function () {
   }
 
   /* ============================================================ 界面元素 */
+  var 上次总气 = -1, 上次总气步 = 0, 质量漂移 = 0;
+
   var 元素 = {
     开始: document.getElementById("按钮-开始"),
     暂停: document.getElementById("按钮-暂停"),
@@ -2739,7 +2763,9 @@ var 参数面板 = (function () {
     状态: document.getElementById("信息-状态"),
     进度: document.getElementById("进度条"),
     参数摘要: document.getElementById("参数摘要"),
-    重置提示: document.getElementById("提示-重置")
+    重置提示: document.getElementById("提示-重置"),
+    放热: document.getElementById("信息-放热"),
+    漂移: document.getElementById("信息-漂移")
   };
 
   /* ============================================================ 渲染与读数 */
@@ -2770,6 +2796,22 @@ var 参数面板 = (function () {
     元素.温差.textContent = 元.最大温差.toFixed(1) + " K";
     元素.温度.textContent = 元.最大温度.toFixed(0) + " K";
     元素.耗时.textContent = 每步毫秒 > 0 ? 每步毫秒.toFixed(2) + " ms/步" : "—";
+    /* 自检一：每消耗 1 mol O₂ 放出多少热 */
+    var 耗氧 = sim.累计耗氧 || 0;
+    if (耗氧 > 1e-24) {
+      元素.放热.textContent = (-sim.累计放热 / 耗氧 / 1000).toFixed(0) + " kJ/mol O₂";
+    } else {
+      元素.放热.textContent = "—（尚无燃烧）";
+    }
+    /* 自检二：气相总量每步漂移百分比（归一化写错就会爆掉） */
+    var 总气 = 0, kk;
+    for (kk = 0; kk < nx全 * ny; kk++) 总气 += 场.气总[kk];
+    if (上次总气 > 0 && 元.步 > 上次总气步) {
+      质量漂移 = (总气 - 上次总气) / 上次总气 * 100 / (元.步 - 上次总气步);
+    }
+    上次总气 = 总气; 上次总气步 = 元.步;
+    元素.漂移.textContent = Math.abs(质量漂移) < 1e-9 ? "0.00 %/步"
+      : ((质量漂移 >= 0 ? "+" : "") + 质量漂移.toFixed(3) + " %/步");
     元素.进度.style.width = (本段进度() * 100).toFixed(1) + "%";
     元素.进度.parentNode.style.display = L > 0 ? "" : "none";
 
