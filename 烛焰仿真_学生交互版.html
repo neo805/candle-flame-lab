@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta name='task-map' content='{"任务1":{"起":1578,"数":62},"任务2":{"起":1008,"数":21},"任务3":{"起":1821,"数":14}}'>
 <!-- 学生交互版；基于 3bc7880 稳态 8X 配置 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1005,27 +1004,33 @@ var 烛焰仿真 = (function () {
 
     var r内 = p.列内半径[从gx], r外 = p.列外半径[从gx];
     /*<<TASK2_START>>*/
-    var 权内 = ____;                       // 提示：2·r内/(r内+r外)
-    var 权外 = ____;
-    var 几何和 = 2.0 + 权内 + 权外;
-    var 权重和 = 几何和 + 向上修正 - 向下修正 + ____;
+    var 权内 = 2 * r内 / (r内 + r外);
+    var 权外 = 2 * r外 / (r内 + r外);
+    var 几何和 = 2.0 + 权内 + 权外;                       // 均匀网格时恒为 4
+    var 权重和 = 几何和 + 向上修正 - 向下修正 + K * (Math.abs(v轴向) + Math.abs(v径向));
     if (权重和 <= 0) {
       out[0] = 0;
       for (i = 0; i < 组分数; i++) out[1 + i] = 0;
       out[10] = T;
       return;
     }
-    var w, 几何项, 附加项;
-    if (到gy < 从gy) {                     // 向上
-      几何项 = 1.0; 附加项 = ____;
-    } else if (到gy > 从gy) {              // 向下
-      几何项 = 1.0; 附加项 = ____;
-    } else if (到gx > 从gx) {              // 向内（靠近轴心）
-      几何项 = ____; 附加项 = ____;
-    } else {                               // 向外
-      几何项 = ____; 附加项 = ____;
+
+    var w;
+    /* 把几何项与对流/浮力项分开，供「烟炱只随对流」使用 */
+    var 几何项, 附加项;
+    if (到gy < 从gy) {                            // 向上（gy 减小）
+      几何项 = 1.0; 附加项 = 向上修正 + K * Math.max(v轴向, 0);
+      w = (几何项 + 附加项) / 权重和;
+    } else if (到gy > 从gy) {                     // 向下（gy 增大）
+      几何项 = 1.0; 附加项 = -向下修正 + K * Math.max(-v轴向, 0);
+      w = (几何项 + 附加项) / 权重和;
+    } else if (到gx > 从gx) {                     // 向内（靠近轴心，gx 增大）
+      几何项 = 权内; 附加项 = K * Math.max(-v径向, 0);
+      w = (几何项 + 附加项) / 权重和;
+    } else {                                      // 向外（远离轴心，gx 减小）
+      几何项 = 权外; 附加项 = K * Math.max(v径向, 0);
+      w = (几何项 + 附加项) / 权重和;
     }
-    w = (几何项 + 附加项) / 权重和;
     /*<<TASK2_END>>*/
 
     var 流量 = n气 * p.气体扩散系数 * 4.0 * w;
@@ -1818,20 +1823,25 @@ var 烛焰仿真 = (function () {
     边界刷新(sim, cur);
 
     /*<<TASK3_START>>*/
-    /* 请按正确顺序调用下面三个阶段；每段结束后必须交换缓冲 */
-    tmp = cur; tmp = nxt;                  // ____
+    /* ① 气体扩散与传输 */
+    nxt.set(cur);
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
-        ____(sim, gx, gy);
-    /* 段间：cur 与 nxt 交换 */
+        气体扩散与传输(sim, gx, gy);
+    tmp = cur; sim.cur = nxt; sim.nxt = tmp; cur = sim.cur; nxt = sim.nxt;
 
+    /* ② 温度扩散 */
+    nxt.set(cur);
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
-        ____(sim, gx, gy);
+        温度扩散(sim, gx, gy);
+    tmp = cur; sim.cur = nxt; sim.nxt = tmp; cur = sim.cur; nxt = sim.nxt;
 
+    /* ③ 化学反应 */
+    nxt.set(cur);
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
-        ____(sim, gx, gy);
+        网格化学反应(sim, gx, gy);
     /*<<TASK3_END>>*/
 
     /* ③b 烟炱按气体净流搬运（不自扩散） */
