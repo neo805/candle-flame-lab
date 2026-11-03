@@ -484,6 +484,51 @@ body {
 .读数项-自检 .读数值 { color: #2b6c8f; }
 
 </style>
+<script>
+/* 学生代码出错时，把浏览器原生的报错显示在页面顶部。
+   本段必须位于其它脚本之前，并且只依赖最基础的 DOM —— 即使整个应用崩掉也要能显示。 */
+(function () {
+  var 已显示 = false;
+  function 报错横幅(标题, 细节) {
+    if (已显示) return;
+    已显示 = true;
+    var 条 = document.createElement("div");
+    条.id = "错误横幅";
+    条.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;background:#b3261e;color:#fff;" +
+      "font:13px/1.75 'Microsoft YaHei',system-ui,sans-serif;padding:12px 44px 12px 18px;" +
+      "box-shadow:0 3px 10px rgba(0,0,0,.25);white-space:pre-wrap";
+    var 头 = document.createElement("div");
+    头.style.cssText = "font-weight:700;margin-bottom:4px";
+    头.textContent = 标题;
+    条.appendChild(头);
+    var 细 = document.createElement("div");
+    细.style.cssText = "font-family:Consolas,'Cascadia Mono',monospace;font-size:12px;opacity:.95;white-space:pre-wrap";
+    细.textContent = 细节;
+    条.appendChild(细);
+    var 关 = document.createElement("button");
+    关.textContent = "×";
+    关.style.cssText = "position:absolute;right:12px;top:8px;background:transparent;border:0;color:#fff;" +
+      "font-size:20px;line-height:1;cursor:pointer";
+    关.onclick = function () { 条.remove(); 已显示 = false; };
+    条.appendChild(关);
+    function 挂() { document.body.appendChild(条); }
+    if (document.body) 挂(); else document.addEventListener("DOMContentLoaded", 挂);
+  }
+  window.onerror = function (信息, 文件, 行, 列, 错误) {
+    var 细节 = "第 " + 行 + " 行：" + 信息;
+    if (错误 && 错误.stack) {
+      var 栈 = String(错误.stack).split("\n").slice(0, 3).join("\n");
+      if (栈.indexOf(信息) < 0) 细节 += "\n" + 栈;
+    }
+    报错横幅("仿真没能运行 —— 你写的代码出错了", 细节 + "\n\n请回到「课堂任务」页修改后重新写入。");
+    return false;
+  };
+  window.addEventListener("unhandledrejection", function (e) {
+    var 因 = e && e.reason;
+    报错横幅("仿真运行时出错", 因 && 因.message ? 因.message : String(因));
+  });
+})();
+</script>
 </head>
 <body>
 <header class="页头">
@@ -566,7 +611,7 @@ var 烛焰仿真 = (function () {
   "use strict";
 
   /* ---------------------------------------------------------------- 索引定义 */
-  var 组分 = { N2: 0, O2: 1, C2H2: 2, H2: 3, H2O: 4, CO2: 5, C25H52_G: 6, C25H52_L: 7, CS: 8 };
+  var 组分 = { N2: 0, O2: 1, C2H2: 2, H2: 3, H2O: 4, CO2: 5, C25H52_Gas: 6, C25H52_Liquid: 7, CS: 8 };
   var 组分数 = 9;
   var 气体组分数 = 7;                       // N2 … C25H52(g)，液蜡与烟炱不计入气相总量
 
@@ -979,7 +1024,7 @@ var 烛焰仿真 = (function () {
     if (n气 > 0) {
       var 比 = 流量 / n气;
       for (i = 0; i < 气体组分数; i++) out[1 + i] = 比 * cur[b + 5 + i];
-      out[1 + 组分.C25H52_L] = 0;                 // 液态蜡不参与流动
+      out[1 + 组分.C25H52_Liquid] = 0;                 // 液态蜡不参与流动
       out[1 + 组分.CS] = 比 * cur[b + 5 + 组分.CS];// 烟炱随气体比例流动
     } else {
       for (i = 0; i < 组分数; i++) out[1 + i] = 0;
@@ -1141,7 +1186,7 @@ var 烛焰仿真 = (function () {
     for (var gy = p.烛芯_gy起; gy <= p.烛芯_gy止; gy++) {
       var b = 序号(gy, gx, nx);
       st[b + 偏移.类型] = 单元类型.烛芯;
-      st[b + 5 + 组分.C25H52_L] = n液蜡;
+      st[b + 5 + 组分.C25H52_Liquid] = n液蜡;
       /* 炽热灯芯边界条件：灯芯被自身火焰包围，表面维持在蒸发温度以上 */
       if (下限 > 0 && st[b + 偏移.T] < 下限) st[b + 偏移.T] = 下限;
     }
@@ -1321,17 +1366,17 @@ var 烛焰仿真 = (function () {
     for (gy = 1; gy < ny - 1; gy++) {
       for (gx = 1; gx < nx; gx++) {
         b = 序号(gy, gx, nx);
-        var 蜡g = st[b + 5 + 组分.C25H52_G];
+        var 蜡g = st[b + 5 + 组分.C25H52_Gas];
         if (蜡g <= 0) continue;
         var 气它 = 0;
-        for (i = 0; i < 气体组分数; i++) if (i !== 组分.C25H52_G) 气它 += st[b + 5 + i];
+        for (i = 0; i < 气体组分数; i++) if (i !== 组分.C25H52_Gas) 气它 += st[b + 5 + i];
         if (气它 <= 0) continue;
         var y = 饱和摩尔分数(sim, st[b + 偏移.T]);
         var 上限 = y / (1 - y) * 气它;                           // 饱和时可容纳的蜡蒸气量
         if (蜡g > 上限) {
           var 凝 = 蜡g - 上限;
-          st[b + 5 + 组分.C25H52_G] = 上限;
-          st[b + 5 + 组分.C25H52_L] += 凝;                       // 凝回液态（质量守恒）
+          st[b + 5 + 组分.C25H52_Gas] = 上限;
+          st[b + 5 + 组分.C25H52_Liquid] += 凝;                       // 凝回液态（质量守恒）
         }
       }
     }
@@ -1359,9 +1404,9 @@ var 烛焰仿真 = (function () {
     var n气 = 0, n;
     for (i = 0; i < 气体组分数; i++) n气 += st[b + 5 + i];
     if (n气 <= 0) return;
-    var 前 = sim._反应前;
-    for (i = 0; i < 组分数; i++) 前[i] = st[b + 5 + i];
-    var 热容气 = 混合物总热容(前, T气);
+    var 反应前 = sim._反应前;
+    for (i = 0; i < 组分数; i++) 反应前[i] = st[b + 5 + i];
+    var 热容气 = 混合物总热容(反应前, T气);
     if (!(热容气 > 0)) return;
 
     var Q气 = p.灯芯顶换热率 * 热容气 * (T气 - 蜡温[顶]);   // J/步
@@ -1403,24 +1448,24 @@ var 烛焰仿真 = (function () {
     sim.本步蒸发 = 蒸发量;
     /* ④ 气相侧：被取走 Q气 的热，并接收蒸发出来的蜡蒸气（含其显热） */
     if (蒸发量 > 0) {
-      var 液蜡 = st[b + 5 + 组分.C25H52_L];
+      var 液蜡 = st[b + 5 + 组分.C25H52_Liquid];
       if (蒸发量 > 液蜡) 蒸发量 = 液蜡;
       /* 气相里能容纳的蜡蒸气同样受饱和限制 */
       if (p.启用蜡蒸气饱和) {
         var 气它 = 0, j;
-        for (j = 0; j < 气体组分数; j++) if (j !== 组分.C25H52_G) 气它 += st[b + 5 + j];
+        for (j = 0; j < 气体组分数; j++) if (j !== 组分.C25H52_Gas) 气它 += st[b + 5 + j];
         var y = 饱和摩尔分数(sim, 蜡温[顶]);   // 界面饱和：以灯芯顶端温度为准
-        var 余 = y / (1 - y) * 气它 - st[b + 5 + 组分.C25H52_G];
+        var 余 = y / (1 - y) * 气它 - st[b + 5 + 组分.C25H52_Gas];
         if (余 < 0) 余 = 0;
         if (蒸发量 > 余) 蒸发量 = 余;
       }
     }
     var T气新 = T气 - Q气 / 热容气;
     if (蒸发量 > 0) {
-      var cp汽 = 单组分热容(组分.C25H52_G, 蜡温[顶]);
+      var cp汽 = 单组分热容(组分.C25H52_Gas, 蜡温[顶]);
       T气新 = (热容气 * T气新 + 蒸发量 * cp汽 * 蜡温[顶]) / (热容气 + 蒸发量 * cp汽);
-      st[b + 5 + 组分.C25H52_G] += 蒸发量;
-      st[b + 5 + 组分.C25H52_L] -= 蒸发量;
+      st[b + 5 + 组分.C25H52_Gas] += 蒸发量;
+      st[b + 5 + 组分.C25H52_Liquid] -= 蒸发量;
     }
     st[b + 偏移.T] = 钳位(T气新, p.T_amb, p.T_Cal_max);
   }
@@ -1472,24 +1517,24 @@ var 烛焰仿真 = (function () {
     var 阈值 = p.反应温度阈值[1];                 // R2 蜡蒸发阈值
     var T = cur[b + 偏移.T];
     if (T <= 阈值) return;
-    var 液蜡 = cur[b + 5 + 组分.C25H52_L];
+    var 液蜡 = cur[b + 5 + 组分.C25H52_Liquid];
     if (液蜡 <= 0) return;
     var 上限 = p.灯芯蒸发系数 * (T - 阈值);
     var e = 液蜡 < 上限 ? 液蜡 : 上限;
     if (e <= 0) return;
 
-    var 前 = sim._反应前, 后 = sim._反应后, i;
-    for (i = 0; i < 组分数; i++) 前[i] = cur[b + 5 + i];
-    for (i = 0; i < 组分数; i++) 后[i] = 前[i];
+    var 反应前 = sim._反应前, 反应后 = sim._反应后, i;
+    for (i = 0; i < 组分数; i++) 反应前[i] = cur[b + 5 + i];
+    for (i = 0; i < 组分数; i++) 反应后[i] = 反应前[i];
     var 行 = p.计量数矩阵[1];                     // R2: C25H52(l) → C25H52(g)
-    for (i = 0; i < 组分数; i++) if (行[i] !== 0) 后[i] += 行[i] * e;
-    var T新 = 求解绝热平衡温度(sim, 前, 后, T, 100000 * e);
+    for (i = 0; i < 组分数; i++) if (行[i] !== 0) 反应后[i] += 行[i] * e;
+    var T新 = 求解绝热平衡温度(sim, 反应前, 反应后, T, 100000 * e);
     /* 蜡从环境温度被烤到蒸发温度所需的显热 */
-    var 显热 = e * 单组分热容(组分.C25H52_L, 阈值) * (阈值 - p.T_amb);
-    var 热容 = 混合物总热容(后, T);
+    var 显热 = e * 单组分热容(组分.C25H52_Liquid, 阈值) * (阈值 - p.T_amb);
+    var 热容 = 混合物总热容(反应后, T);
     if (热容 > 0) T新 -= 显热 / 热容;
     T新 = 钳位(T新, p.T_amb, p.T_Cal_max);
-    for (i = 0; i < 组分数; i++) nxt[b + 5 + i] = 后[i] < 0 ? 0 : 后[i];
+    for (i = 0; i < 组分数; i++) nxt[b + 5 + i] = 反应后[i] < 0 ? 0 : 反应后[i];
     nxt[b + 偏移.T] = T新;
   }
 
@@ -1501,95 +1546,95 @@ var 烛焰仿真 = (function () {
     var T = cur[b + 偏移.T];
     if (T < p.最低反应阈值) return;                    // 最快路径：未达最低反应阈值
 
-    var 前 = sim._反应前, 后 = sim._反应后, i, r;
-    for (i = 0; i < 组分数; i++) 前[i] = cur[b + 5 + i];
+    var 反应前 = sim._反应前, 反应后 = sim._反应后, i, r;
+    for (i = 0; i < 组分数; i++) 反应前[i] = cur[b + 5 + i];
 
     var 是烛芯 = cur[b + 偏移.类型] === 单元类型.烛芯;
-    var 进度 = 计算反应进度(sim, 前, T, 是烛芯);
+    var 进度 = 计算反应进度(sim, 反应前, T, 是烛芯);
     var 有反应 = false;
     for (r = 0; r < 反应数; r++) if (进度[r] > 0) { 有反应 = true; break; }
     if (!有反应) return;
 
-    for (i = 0; i < 组分数; i++) 后[i] = 前[i];
+    for (i = 0; i < 组分数; i++) 反应后[i] = 反应前[i];
     var 总焓变 = 0;
     /*<<TASK1_START>>*/
     /* 每个反应一段代码。格式：
-     *   if (进度[k] > 0) {   e = 进度[k];   然后逐个组分加减 系数×e，并把 焓变×e 累进 总焓变 }
+     *   if (进度[k] > 0) { 本反应量 = 进度[k]; 然后逐个组分加减 系数×本反应量，并把 焓变×本反应量 累进 总焓变 }
      *   反应物消耗 → 系数取负；产物生成 → 系数取正；放热 → 焓变取负；吸热 → 取正。
-     *   列名：组分.O2 / 组分.C2H2 / 组分.H2 / 组分.H2O / 组分.CO2 / 组分.C25H52_G / 组分.C25H52_L / 组分.CS
+     *   列名：组分.O2 / 组分.C2H2 / 组分.H2 / 组分.H2O / 组分.CO2 / 组分.C25H52_Gas / 组分.C25H52_Liquid / 组分.CS
      */
 
     /* R1 乙炔氧化：C2H2 + 2.5 O2 → 2 CO2 + H2O，放热（示例，已给全） */
     if (进度[0] > 0) {
-      var e1 = 进度[0];
-      后[组分.C2H2] += -1.0 * e1;
-      后[组分.O2]   += -2.5 * e1;
-      后[组分.CO2]  +=  2.0 * e1;
-      后[组分.H2O]  +=  1.0 * e1;
-      总焓变 += -1255500.0 * e1;
-      sim.累计耗氧 += 2.5 * e1;
+      var 乙炔氧化量 = 进度[0];
+      反应后[组分.C2H2] += -1.0 * 乙炔氧化量;
+      反应后[组分.O2]   += -2.5 * 乙炔氧化量;
+      反应后[组分.CO2]  +=  2.0 * 乙炔氧化量;
+      反应后[组分.H2O]  +=  1.0 * 乙炔氧化量;
+      总焓变 += -1255500.0 * 乙炔氧化量;
+      sim.累计耗氧 += 2.5 * 乙炔氧化量;
     }
 
     /* R2 蜡蒸发：C25H52(l) → C25H52(g)，吸热 */
     if (进度[1] > 0) {
-      var e2 = 进度[1];
-      后[组分.C25H52_L] += -1.0 * e2;
-      后[组分.C25H52_G] +=  1.0 * e2;
-      总焓变 += 100000.0 * e2;
+      var 蜡蒸发量 = 进度[1];
+      反应后[组分.C25H52_Liquid] += -1.0 * 蜡蒸发量;
+      反应后[组分.C25H52_Gas] +=  1.0 * 蜡蒸发量;
+      总焓变 += 100000.0 * 蜡蒸发量;
     }
 
     /* R3 蜡热解：C25H52(g) → 12.5 C2H2 + 13.5 H2，吸热 */
     if (进度[2] > 0) {
-      var e3 = 进度[2];
-      后[组分.C25H52_G] += -1.0 * e3;
-      后[组分.C2H2]     += 12.5 * e3;
-      后[组分.H2]       += 13.5 * e3;
-      总焓变 += 3391800.0 * e3;
+      var 蜡热解量 = 进度[2];
+      反应后[组分.C25H52_Gas] += -1.0 * 蜡热解量;
+      反应后[组分.C2H2]     += 12.5 * 蜡热解量;
+      反应后[组分.H2]       += 13.5 * 蜡热解量;
+      总焓变 += 3391800.0 * 蜡热解量;
     }
 
     /* R4 氢氧化：2 H2 + O2 → 2 H2O，放热 */
     if (进度[3] > 0) {
-      var e4 = 进度[3];
-      后[组分.H2]  += -2.0 * e4;
-      后[组分.O2]  += -1.0 * e4;
-      后[组分.H2O] +=  2.0 * e4;
-      总焓变 += -483600.0 * e4;
-      sim.累计耗氧 += 1.0 * e4;
+      var 氢氧化量 = 进度[3];
+      反应后[组分.H2]  += -2.0 * 氢氧化量;
+      反应后[组分.O2]  += -1.0 * 氢氧化量;
+      反应后[组分.H2O] +=  2.0 * 氢氧化量;
+      总焓变 += -483600.0 * 氢氧化量;
+      sim.累计耗氧 += 1.0 * 氢氧化量;
     }
 
     /* R5 烟炱氧化：C(s) + O2 → CO2，放热 */
     if (进度[4] > 0) {
-      var e5 = 进度[4];
-      后[组分.CS]  += -1.0 * e5;
-      后[组分.O2]  += -1.0 * e5;
-      后[组分.CO2] +=  1.0 * e5;
-      总焓变 += -393500.0 * e5;
-      sim.累计耗氧 += 1.0 * e5;
+      var 烟炱氧化量 = 进度[4];
+      反应后[组分.CS]  += -1.0 * 烟炱氧化量;
+      反应后[组分.O2]  += -1.0 * 烟炱氧化量;
+      反应后[组分.CO2] +=  1.0 * 烟炱氧化量;
+      总焓变 += -393500.0 * 烟炱氧化量;
+      sim.累计耗氧 += 1.0 * 烟炱氧化量;
     }
 
     /* R6 烟炱生成：C2H2 → 2 C(s) + H2，放热 */
     if (进度[5] > 0) {
-      var e6 = 进度[5];
-      后[组分.C2H2] += -1.0 * e6;
-      后[组分.CS]   +=  2.0 * e6;
-      后[组分.H2]   +=  1.0 * e6;
-      总焓变 += -226700.0 * e6;
+      var 烟炱生成量 = 进度[5];
+      反应后[组分.C2H2] += -1.0 * 烟炱生成量;
+      反应后[组分.CS]   +=  2.0 * 烟炱生成量;
+      反应后[组分.H2]   +=  1.0 * 烟炱生成量;
+      总焓变 += -226700.0 * 烟炱生成量;
     }
     /*<<TASK1_END>>*/
 
     sim.累计放热 += 总焓变;
-    var T新 = 求解绝热平衡温度(sim, 前, 后, T, 总焓变);
+    var T新 = 求解绝热平衡温度(sim, 反应前, 反应后, T, 总焓变);
     /* 灯芯里蜡从环境温度被烤到蒸发温度所需的显热，同样取自本格，保证能量守恒 */
     if (是烛芯 && p.灯芯蒸发系数 > 0 && 进度[1] > 0) {
-      var 显热 = 进度[1] * 单组分热容(组分.C25H52_L, p.反应温度阈值[1])
+      var 显热 = 进度[1] * 单组分热容(组分.C25H52_Liquid, p.反应温度阈值[1])
         * (p.反应温度阈值[1] - p.T_amb);
-      var 热容 = 混合物总热容(后, T);
+      var 热容 = 混合物总热容(反应后, T);
       if (热容 > 0) T新 -= 显热 / 热容;
       T新 = 钳位(T新, p.T_amb, p.T_Cal_max);
     }
     var ω = p.化学欠松弛 === undefined ? 1.0 : p.化学欠松弛;
     if (ω < 1) T新 = T + ω * (T新 - T);
-    for (i = 0; i < 组分数; i++) nxt[b + 5 + i] = 后[i] < 0 ? 0 : 后[i];
+    for (i = 0; i < 组分数; i++) nxt[b + 5 + i] = 反应后[i] < 0 ? 0 : 反应后[i];
     nxt[b + 偏移.T] = T新;
   }
 
@@ -2461,6 +2506,23 @@ var 参数面板 = (function () {
     var 行 = document.createElement("div");
     行.className = "阈值组";
     var 控件 = [];
+
+    /* 只读模式：整组显示为静态数值，不给输入框 */
+    if (项.只读) {
+      var 静表 = document.createElement("div");
+      静表.className = "阈值表";
+      for (var ri = 0; ri < 项.子项.length; ri++) {
+        var 静行 = document.createElement("div");
+        静行.className = "阈值行";
+        静行.title = 项.子项[ri].式;
+        静行.innerHTML = '<span class="阈值名">' + 项.子项[ri].名 +
+          '</span><span class="阈值值">' + 基准[项.键][ri] + ' K</span>';
+        静表.appendChild(静行);
+      }
+      行.appendChild(静表);
+      行.同步 = function () { };          // 只读项不需要回填
+      return 行;
+    }
     项.子项.forEach(function (子, i) {
       var 单元 = document.createElement("label");
       单元.className = "阈值项";
