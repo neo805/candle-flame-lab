@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<!-- 由 _dev/build_scales.mjs 生成于 2026/11/3 05:00:48；8× 网格；调参结果见 tune_8x.json -->
+<!-- _dev/build_two.mjs 生成于 2026/11/3 20:01:34；8× 网格 + 轴向稀疏 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>烛焰温度场仿真 · 稳态优化版</title>
@@ -296,6 +296,9 @@ var 烛焰仿真 = (function () {
       /* 径向分级网格：精细半径以内用 dx，之外按几何增长放大列宽（1 = 不分级） */
       精细半径mm: 0,          // 0 表示等于域半径（即全程用 dx，均匀网格）
       外区增长: 1.0,          // 每列宽度增长倍率；>1 才分级
+      /* 轴向稀疏化：烛芯上方「轴向稀疏起点mm」以上，行高按 轴向增长 几何放大；0 = 不启用 */
+      轴向稀疏起点mm: 0,
+      轴向增长: 1.25,
       /* 显示窗口（物理量，mm）：只导出/渲染窗口内的网格，窗口外仍参与计算。
          0 表示取整个计算域。 */
       观察窗半径mm: 0,
@@ -396,8 +399,12 @@ var 烛焰仿真 = (function () {
         [10.20, 0.00435, -2.10e-06, 4.53e-10]           // C(s)
       ],
 
-      /* H2 热容修正系数（fit 自 JANAF：300K 28.84 → 3000K 37.0 J/(mol·K)） */
-      热容H2修正: [29.03, 0.00288, 3.65e-07, 0.0],
+      /* H2 热容修正系数：对 NIST-JANAF 的 H2 定压摩尔热容表（300–3000 K 共 23 点）
+       * 做最小二乘三次拟合，全区间相对误差 ≤ 0.9%：
+       *   Cp = 29.517 − 2.3016e-3·T + 3.0217e-6·T² − 2.5359e-10·T³  [J/(mol·K)]
+       * 对照 NIST：1000K 30.0 / 1500K 32.0 / 2000K 35.0 / 3000K 43.0
+       * （原始系数在 1725 K 以上给出负热容，属外推失效，不可用） */
+      热容H2修正: [29.517, -2.3016e-3, 3.0217e-6, -2.5359e-10],
       启用热容修正: false,   // 默认关闭＝与 Python 版/Excel 版完全一致；实验时置 true
     };
   }
@@ -410,6 +417,31 @@ var 烛焰仿真 = (function () {
     /* 计算域尺寸用物理量给出，网格数按分辨率导出 */
     p.nx_half = Math.round(p.域半径mm * s) + 1;
     p.ny = Math.round(p.域高mm * s) + 2;
+
+    /* ---- 轴向稀疏化：烛芯以上 h_start 之外按几何增长放大行高，行数由方案反推 ---- */
+    /* 行号规则：gy 越大越靠下；gy = ny-2 是最底内部行。dz[0] 与 dz[ny-1] 为幽灵/镜像行。 */
+    p.dz = new Float64Array(p.ny);
+    if (p.轴向稀疏起点mm > 0 && p.轴向增长 > 1) {
+      var H域 = p.域高mm / 1000;
+      var h稀 = Math.min(H域, (p.烛芯距底mm + p.轴向稀疏起点mm) / 1000);
+      var 细行数 = Math.max(1, Math.round(h稀 / p.dx));
+      var 余高 = H域 - 细行数 * p.dx;
+      var 粗宽 = [], 累 = 0, kk = 0;
+      while (累 < 余高 - 1e-12 && kk < 4000) {
+        var wk = p.dx * Math.pow(p.轴向增长, kk + 1);
+        if (累 + wk > 余高) wk = 余高 - 累;
+        粗宽.push(wk); 累 += wk; kk++;
+      }
+      var 粗行数 = 粗宽.length;
+      p.ny = 1 + 粗行数 + 细行数 + 1;                 // 顶部幽灵 + 粗行 + 细行 + 底部镜像
+      p.dz = new Float64Array(p.ny);
+      for (var i2 = 0; i2 < 粗行数; i2++) p.dz[1 + i2] = 粗宽[粗行数 - 1 - i2];  // 越靠上越宽
+      for (var i3 = 0; i3 < 细行数; i3++) p.dz[1 + 粗行数 + i3] = p.dx;
+      p.dz[0] = p.dz[1];
+      p.dz[p.ny - 1] = p.dx;
+    } else {
+      for (var i4 = 0; i4 < p.ny; i4++) p.dz[i4] = p.dx;
+    }
 
     p.烛芯_gx = p.nx_half - 1;               // 烛芯贴在对称轴旁的最内列
     p.烛芯_gy = (p.ny - 2) - Math.round(p.烛芯距底mm * s);
@@ -434,7 +466,7 @@ var 烛焰仿真 = (function () {
     /* ---- 径向列宽：均匀，或「精细区 + 几何增长外区」的分级网格 ---- */
     /* 分级时由增长倍率反推半域列数 nx_half，所以必须在这里先定下来 */
     var 目标半径 = p.域半径mm / 1000;
-    var nx, 列宽, j, 累计, 宽;
+    var nx, 列宽, j, 累计, 宽, ny = p.ny;
     if (p.外区增长 > 1 && p.精细半径mm > 0 && p.精细半径mm < p.域半径mm) {
       var 精细列数 = Math.round(p.精细半径mm * s);
       列宽 = [];
@@ -474,24 +506,28 @@ var 烛焰仿真 = (function () {
       p.内权[gx0] = (ri + ro) > 0 ? 2 * ri / (ri + ro) : 0;
       p.外权[gx0] = (ri + ro) > 0 ? 2 * ro / (ri + ro) : 0;
     }
-    /* 几何量只与列号有关，预计算成一维数组 */
+    /* 几何量：列向按列、轴向按格 */
     p.列号 = new Float64Array(nx);          // n = 该列到对称轴的列数，0=轴心
-    p.体积 = new Float64Array(nx);
-    p.厚度 = new Float64Array(nx);
+    p.体积 = new Float64Array(nx * ny);
+    p.厚度 = new Float64Array(nx * ny);
     p.内面积 = new Float64Array(nx);
     p.外面积 = new Float64Array(nx);
     p.上下面积 = new Float64Array(nx);
     for (var gx = 0; gx < nx; gx++) {
       var n = nx - 1 - gx;
       p.列号[gx] = n;
-      p.体积[gx] = (p.dtheta / 2) * (p.列外半径[gx] * p.列外半径[gx] - p.列内半径[gx] * p.列内半径[gx]) * p.dx;
+      var 面积水 = (p.dtheta / 2) * (p.列外半径[gx] * p.列外半径[gx] - p.列内半径[gx] * p.列内半径[gx]);
       p.内面积[gx] = p.列内半径[gx] * p.dtheta * p.dx;
       p.外面积[gx] = p.列外半径[gx] * p.dtheta * p.dx;
-      p.上下面积[gx] = (p.dtheta / 2) * (p.列外半径[gx] * p.列外半径[gx] - p.列内半径[gx] * p.列内半径[gx]);
-      p.厚度[gx] = p.体积[gx] / (p.dx * p.dx);
+      p.上下面积[gx] = 面积水;
+      for (var gy7 = 0; gy7 < ny; gy7++) {
+        var kk = gy7 * nx + gx, dz行 = p.dz[gy7];
+        p.体积[kk] = 面积水 * dz行;
+        p.厚度[kk] = dz行;
+      }
     }
     /* 1D 固体灯芯：热容按几何体积估算（密度 900 kg/m³ × 固蜡比热 2000 J/(kg·K)） */
-    p.蜡柱热容 = p.体积[p.烛芯_gx] * p.蜡密度 * 2000 * (p.蜡柱热容倍率 || 1);
+    p.蜡柱热容 = p.体积[p.烛芯_gy * p.nx_half + p.烛芯_gx] * p.蜡密度 * 2000 * (p.蜡柱热容倍率 || 1);
     p.蜡柱顶行 = p.烛芯_gy起;      // gy 小 = 上
     p.蜡柱底行 = p.烛芯_gy止;
     return p;
@@ -691,14 +727,14 @@ var 烛焰仿真 = (function () {
 
     /* 1. 全场填充常温空气（理想气体状态方程给出各列物质的量） */
     for (gx = 0; gx < nx; gx++) {
-      var V = p.体积[gx];
-      var n总 = p.P_atm * V / (p.R_gas * p.T_amb);
-      var nN2 = p.空气中氮气占比 * n总;
-      var nO2 = p.空气中氧气占比 * n总;
       for (gy = 0; gy < ny; gy++) {
         b = 序号(gy, gx, nx);
+        /* 轴向行高可变：物质的量必须逐格按本格体积计算 */
+        var n总 = p.P_atm * p.体积[gy * nx + gx] / (p.R_gas * p.T_amb);
+        var nN2 = p.空气中氮气占比 * n总;
+        var nO2 = p.空气中氧气占比 * n总;
         st[b + 偏移.类型] = 单元类型.动态;
-        st[b + 偏移.厚度] = p.厚度[gx];
+        st[b + 偏移.厚度] = p.厚度[gy * nx + gx];
         st[b + 偏移.T] = p.T_amb;
         st[b + 偏移.vr] = 0;
         st[b + 偏移.vz] = 0;
@@ -778,7 +814,7 @@ var 烛焰仿真 = (function () {
       b = 序号(gy, 0, nx);
       邻 = 序号(gy, 1, nx);
       T = st[邻 + 偏移.T];
-      n总 = p.P_atm * p.体积[0] / (p.R_gas * T);
+      n总 = p.P_atm * p.体积[gy * nx] / (p.R_gas * T);
       st[b + 偏移.T] = T;
       st[b + 5 + 组分.N2] = p.空气中氮气占比 * n总;
       st[b + 5 + 组分.O2] = p.空气中氧气占比 * n总;
@@ -788,7 +824,7 @@ var 烛焰仿真 = (function () {
 
   function 烛芯填充(sim, st) {
     var p = sim.p, nx = p.nx_half, gx = p.烛芯_gx;
-    var V = p.体积[gx];
+    var V = p.体积[p.烛芯_gy * nx + gx];
     var n液蜡 = p.烛芯流量 * V * p.蜡密度 / p.蜡摩尔质量;
     var 下限 = p.烛芯下限温度 > 0 ? p.烛芯下限温度 : 0;
     for (var gy = p.烛芯_gy起; gy <= p.烛芯_gy止; gy++) {
@@ -818,11 +854,10 @@ var 烛焰仿真 = (function () {
   function 点火(sim, st) {
     var p = sim.p, nx = p.nx_half;
     for (var gx = p.点火_gx起; gx <= p.点火_gx止; gx++) {
-      var V = p.体积[gx];
-      var n总 = p.P_atm * V / (p.R_gas * p.点火温度);
-      var n种子 = p.种子比例 * n总;
       for (var gy = p.点火_gy起; gy <= p.点火_gy止; gy++) {
         var b = 序号(gy, gx, nx);
+        var n总 = p.P_atm * p.体积[gy * nx + gx] / (p.R_gas * p.点火温度);
+        var n种子 = p.种子比例 * n总;
         st[b + 偏移.T] = p.点火温度;
         st[b + 5 + 组分.H2] = n种子;
       }
@@ -1453,7 +1488,7 @@ var 烛焰仿真 = (function () {
 
           /* 气体实际体积 vs 几何体积的偏差（"溢出率"） */
           var V实际 = 气 * p.R_gas * t / p.P_atm;
-          var V几何 = p.体积[gx];
+          var V几何 = p.体积[gy * nx + gx];
           溢出[idx] = V几何 > 0 ? (V实际 - V几何) / V几何 * 100.0 : 0;
 
           if (vz场) vz场[idx] = st[b + 偏移.vz];
@@ -1928,8 +1963,8 @@ var 渲染 = (function () {
     精细半径mm: 12,
     外区增长: 1.25,
     /* 显示窗口：仍为原版视野 */
-    观察窗半径mm: 5,
-    观察窗上mm: 15,
+    观察窗半径mm: 2.7,
+    观察窗上mm: 6,
     观察窗下mm: 2,
 
     /* 1D 固体灯芯（亚网格模型） */
@@ -1961,8 +1996,10 @@ var 渲染 = (function () {
     烟炱沉降系数: 0,         // 教学需要环状内焰烟炱：关掉沉降
     烟炱只随对流: true,      // 烟炱是固体：不自扩散，只随气体净流搬运
 
-    最大迭代步数: 5217,
+    最大迭代步数: 20000,
     T_Cal_max: 2700,         // 实测无钳位真实峰值 2702K，故取 2700：既不再削峰，也不越出 Cp 拟合区间
+    轴向稀疏起点mm: 6,
+    轴向增长: 1.25,
     收敛阈值: 10.0
   };
 
