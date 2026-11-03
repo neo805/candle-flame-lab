@@ -493,11 +493,6 @@ body {
     <button id="按钮-单步" class="按钮">单步</button>
     <button id="按钮-重置" class="按钮">重置</button>
     <span class="工具栏-分隔"></span>
-    <label class="步数框">
-      <span class="步数框-名">每段步数</span>
-      <input id="输入-步数" type="number" min="0" max="1000000" step="10" value="160">
-      <span class="步数框-注">0 = 不限</span>
-    </label>
     <button id="按钮-参数" class="按钮 按钮-开关" aria-expanded="false">参数 ▸</button>
   </div>
 </header>
@@ -524,7 +519,7 @@ body {
       <div class="徽标 徽标-待机" id="信息-状态">待开始</div>
       <div class="重置提示" id="提示-重置">参数已改动，点「重置」后生效</div>
       <p class="读数卡-参数" id="参数摘要"></p>
-      <p class="读数卡-注">每跑满「每段步数」自动暂停，按「继续」再跑一段；7 幅场图统一按 82×102 的长宽比绘制。</p>
+      <p class="读数卡-注">每跑满「每段步数」（参数面板内可调）自动暂停，按「继续」再跑一段；7 幅场图统一按 82×102 的长宽比绘制。</p>
     </section>
   </main>
 
@@ -2528,14 +2523,14 @@ var 参数面板 = (function () {
   /* 基准 = 引擎默认参数（保证反应温度阈值等键都存在）再叠加稳态 8X 覆盖项 */
   var 基准 = 深拷贝(烛焰仿真.默认参数());
   for (var _k in 标准答案) if (Object.prototype.hasOwnProperty.call(标准答案, _k)) 基准[_k] = 标准答案[_k];
-  var 界面 = { 每段步数: 200 };
+  var 界面 = { 每段步数: 1500 };
 
   /* 参数架构：组 → 项。类型：线性 / 对数 / 阈值 / 选项 */
   var 参数架构 = [
     {
       组: "运行", 徽标: "实时", 项: [
         { 键: "每段步数", 名: "每段步数", 说明: "0 = 不设上限", 存: 界面,
-          类型: "线性", 最小: 0, 最大: 4000, 小数: 0 }
+          类型: "线性", 最小: 0, 最大: 10000, 小数: 0 }
       ]
     },
     {
@@ -2863,17 +2858,6 @@ var 参数面板 = (function () {
     刷新按钮();
   });
 
-  元素.步数.addEventListener("change", function () {
-    var v = Number(元素.步数.value);
-    if (!isFinite(v) || v < 0) v = 0;
-    v = Math.min(1000000, Math.round(v));
-    元素.步数.value = v;
-    界面.每段步数 = v;
-    段起 = sim.步数;                          // 新段长从当前步数开始计
-    if (状态 === "段完成") 状态 = "暂停";
-    刷新按钮();
-    刷新读数(计算元信息());
-  });
 
   /* ============================================================ 参数面板 */
   元素.参数开关.addEventListener("click", function () {
@@ -2941,7 +2925,6 @@ var 参数面板 = (function () {
 
   控件 = 参数面板.构建(元素.参数体, 参数架构, 基准, { 变更: 参数变更 });
 
-  元素.步数.value = 界面.每段步数;
   重建();
 
   var 静态出图 = (location.hash || "").indexOf("final") >= 0;
