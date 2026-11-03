@@ -1810,6 +1810,23 @@ var 烛焰仿真 = (function () {
   /* ------------------------------------------------------------- 单步迭代 */
   /* 顺序与 Python 版 step() 完全一致：
    *   保存收敛参考 → 气体传输 → 温度扩散 → 化学反应 → 源项 → 收敛判断 → 镜像/掩码 */
+  /* ------------------------------------------------ 缓冲操作（课堂任务3 的辅助） */
+  /* 仿真里有两个缓冲区：
+   *   cur —— 这一步开始时各格的现状（输入）
+   *   nxt —— 这一步算出来的新值（输出）
+   * 每个阶段都从 cur 读、往 nxt 写，所以开始前要先把 cur 复制到 nxt；
+   * 算完再把两个缓冲交换一下，让这一阶段的结果成为下一阶段的输入。
+   */
+  function 准备输出缓冲(sim) {
+    sim.nxt.set(sim.cur);
+  }
+
+  function 交换缓冲(sim) {
+    var 临时 = sim.cur;
+    sim.cur = sim.nxt;
+    sim.nxt = 临时;
+  }
+
   function 单步(sim) {
     var p = sim.p, nx = p.nx_half, ny = p.ny, cur = sim.cur, nxt = sim.nxt, old = sim.old;
     var gx, gy, tmp, k;
@@ -1823,26 +1840,27 @@ var 烛焰仿真 = (function () {
     边界刷新(sim, cur);
 
     /*<<TASK3_START>>*/
-    /* ① 气体扩散与传输 */
-    nxt.set(cur);
+    /* ① 气体扩散与传输：先准备输出缓冲，让气体在两格之间流动，再交换缓冲 */
+    准备输出缓冲(sim);
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
         气体扩散与传输(sim, gx, gy);
-    tmp = cur; sim.cur = nxt; sim.nxt = tmp; cur = sim.cur; nxt = sim.nxt;
+    交换缓冲(sim);
 
-    /* ② 温度扩散 */
-    nxt.set(cur);
+    /* ② 温度扩散：同样先准备、再计算、再交换 */
+    准备输出缓冲(sim);
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
         温度扩散(sim, gx, gy);
-    tmp = cur; sim.cur = nxt; sim.nxt = tmp; cur = sim.cur; nxt = sim.nxt;
+    交换缓冲(sim);
 
-    /* ③ 化学反应 */
-    nxt.set(cur);
+    /* ③ 化学反应：最后一阶段算完不必交换，结果留在 nxt 里交给后续步骤 */
+    准备输出缓冲(sim);
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
         网格化学反应(sim, gx, gy);
     /*<<TASK3_END>>*/
+    cur = sim.cur; nxt = sim.nxt;          // 让后面的代码拿到交换后的缓冲
 
     /* ③b 烟炱按气体净流搬运（不自扩散） */
     烟炱净流搬运(sim, nxt);
