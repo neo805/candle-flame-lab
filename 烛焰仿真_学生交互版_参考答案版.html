@@ -475,8 +475,8 @@ body {
 }
 .阈值表 { margin: 6px 0 2px 0; }
 .阈值行 { display: flex; gap: 6px; align-items: baseline; font-size: 12px; padding: 1px 0; }
-.阈值名 { width: 24px; flex: none; color: #7b8794; }
-.阈值式 { flex: 1; min-width: 64px; color: #3d4852; white-space: nowrap; }
+.阈值名 { width: 22px; flex: none; color: #7b8794; }
+.阈值式 { flex: 1; color: #3d4852; white-space: nowrap; font-size: 11.5px; }
 .阈值值 { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; color: #2f3742; }
 
 /* 自检读数：与运行读数同区，稍作区分 */
@@ -514,8 +514,24 @@ body {
     function 挂() { document.body.appendChild(条); }
     if (document.body) 挂(); else document.addEventListener("DOMContentLoaded", 挂);
   }
+  /* 把成品文件里的行号翻译成“任务X 第Y行” */
+  function 定位(行) {
+    /* 生成文件里会插入一行 <meta name="task-map" content="{...}">，
+       记录三个任务各自在文件中的起始行与行数 */
+    var el = document.querySelector("meta[name='task-map']");
+    if (!el) return null;
+    var m;
+    try { m = JSON.parse(el.getAttribute("content")); } catch (e) { return null; }
+    if (!m) return null;
+    for (var k in m) if (Object.prototype.hasOwnProperty.call(m, k)) {
+      var r = m[k];
+      if (行 >= r.起 && 行 < r.起 + r.数) return { 任务: k, 行: 行 - r.起 + 1 };
+    }
+    return null;
+  }
   window.onerror = function (信息, 文件, 行, 列, 错误) {
-    var 细节 = "第 " + 行 + " 行：" + 信息;
+    var 位 = 定位(行);
+    var 细节 = (位 ? 位.任务 + " 第 " + 位.行 + " 行" : "第 " + 行 + " 行") + "：" + 信息;
     if (错误 && 错误.stack) {
       var 栈 = String(错误.stack).split("\n").slice(0, 3).join("\n");
       if (栈.indexOf(信息) < 0) 细节 += "\n" + 栈;
@@ -2516,6 +2532,7 @@ var 参数面板 = (function () {
         静行.className = "阈值行";
         静行.title = 项.子项[ri].式;
         静行.innerHTML = '<span class="阈值名">' + 项.子项[ri].名 +
+          '</span><span class="阈值式">' + 项.子项[ri].式 +
           '</span><span class="阈值值">' + 基准[项.键][ri] + ' K</span>';
         静表.appendChild(静行);
       }
@@ -2690,12 +2707,12 @@ var 参数面板 = (function () {
       组: "课堂任务1 相关 · 只读", 徽标: "锁定", 项: [
         { 键: "反应温度阈值", 只读: true, 类型: "阈值", 最小: 300, 最大: 2200,
           子项: [
-            { 名: "R1", 式: "乙炔氧化" },
-            { 名: "R2", 式: "蜡蒸发" },
-            { 名: "R3", 式: "蜡热解" },
-            { 名: "R4", 式: "氢氧化" },
-            { 名: "R5", 式: "烟炱氧化" },
-            { 名: "R6", 式: "烟炱生成" }
+            { 名: "R1", 式: "乙炔氧化反应阈值温度" },
+            { 名: "R2", 式: "蜡蒸发反应阈值温度" },
+            { 名: "R3", 式: "蜡热解反应阈值温度" },
+            { 名: "R4", 式: "氢氧化反应阈值温度" },
+            { 名: "R5", 式: "烟炱氧化反应阈值温度" },
+            { 名: "R6", 式: "烟炱生成反应阈值温度" }
           ]
         }
       ]
