@@ -2602,23 +2602,28 @@ var 参数面板 = (function () {
     var 温度映射 = function (场) {
       return {
         数据: 场.T, 色标: "烛焰",
-        归一化: function (v) { return 色标库.线性(v, 300, 2000); }
+        归一化: function (v) { return 色标库.线性(v, 300, 3000); }
       };
     };
-    var 温度刻度 = [300, 500, 700, 900, 1100, 1300, 1500, 1700, 1900].map(function (v) {
-      return { t: 色标库.线性(v, 300, 2000), 文字: String(v) };
+    var 温度刻度 = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000].map(function (v) {
+      return { t: 色标库.线性(v, 300, 3000), 文字: String(v) };
     });
-    var 组分刻度 = [1e-10, 1e-8, 1e-6, 1e-4, 1e-2].map(function (v) {
-      return { t: 色标库.对数(v, 1e-10, 1e-2), 文字: v.toExponential(0).replace("e-", "e−") };
-    });
-    function 组分定义(id, 写法, 下标, 色标) {
+    /* 组分面板：量程与稳态版一致，可按面板单独指定上下限 */
+    function 组分定义(id, 写法, 下标, 色标, 下限, 上限) {
+      var 低 = 下限 || 1e-10, 高 = 上限 || 1e-2;
+      var 刻 = [];
+      var 启 = Math.log10(低), 跨 = Math.log10(高) - 启;
+      for (var q = 0; q <= 6; q++) {
+        var vv = Math.pow(10, 启 + 跨 * q / 6);
+        刻.push({ t: 色标库.对数(vv, 低, 高), 文字: vv.toExponential(0).replace("e-", "e−").replace("e+", "e") });
+      }
       return {
         画布: document.getElementById(id), 环境: 环境,
-        标题: 写法 + " 摩尔分数", 色标: 色标, 色标单位: "—", 色标刻度: 组分刻度,
+        标题: 写法 + " 摩尔分数", 色标: 色标, 色标单位: "—", 色标刻度: 刻,
         映射: function (场) {
           return {
             数据: 场.组分场[下标], 色标: 色标,
-            归一化: function (v) { return 色标库.对数(v, 1e-10, 1e-2); }
+            归一化: function (v) { return 色标库.对数(v, 低, 高); }
           };
         },
         等比: true
@@ -2672,7 +2677,7 @@ var 参数面板 = (function () {
       },
       C25H52G: 组分定义("cv-C25H52G", "C₂₅H₅₂(g)", 6, "Oranges"),
       C2H2: 组分定义("cv-C2H2", "C₂H₂", 2, "YlOrRd"),
-      CS: 组分定义("cv-CS", "C(s) 烟炱", 8, "Greys")
+      CS: 组分定义("cv-CS", "C(s) 烟炱", 8, "Greys", 1e-13, 1e-1)
     };
   }
 
