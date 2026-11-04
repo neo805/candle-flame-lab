@@ -1031,8 +1031,6 @@ var 烛焰仿真 = (function () {
   }
 
   /*<<TASK2_START>>*/
-
-
   function 邻接网格流动(sim, 从gx, 从gy, 到gx, 到gy, out) {
     /* 前面：判断邻接关系、取温度与速度 —— 已封装在 准备流动() */
     var 格 = 准备流动(sim, 从gx, 从gy, 到gx, 到gy, out);
@@ -1624,8 +1622,6 @@ var 烛焰仿真 = (function () {
   }
 
   /*<<TASK1_START>>*/
-
-
   function 网格化学反应(sim, gx, gy) {
     var 反应 = 准备反应(sim, gx, gy);
     if (反应 === null) return;
@@ -3110,7 +3106,7 @@ var 参数面板 = (function () {
       /* 收尾：烟炱搬运、源项、收敛判断、提交 */
       烛焰仿真.结束一步(sim);
     }
-    /*<<TASK3_END>>*/
+  /*<<TASK3_END>>*/
 
     累计计算毫秒 += performance.now() - t0;
     计算步数 += n;
