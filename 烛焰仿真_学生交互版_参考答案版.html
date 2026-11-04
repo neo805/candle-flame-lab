@@ -1839,7 +1839,6 @@ var 烛焰仿真 = (function () {
     /* ⓪b 边界幽灵格跟随内格温度（消除虚假质量源） */
     边界刷新(sim, cur);
 
-    /*<<TASK3_START>>*/
     /* ① 气体扩散与传输：先准备输出缓冲，让气体在两格之间流动，再交换缓冲 */
     准备输出缓冲(sim);
     for (gy = 1; gy < ny - 1; gy++)
@@ -1859,7 +1858,6 @@ var 烛焰仿真 = (function () {
     for (gy = 1; gy < ny - 1; gy++)
       for (gx = 1; gx < nx; gx++)
         网格化学反应(sim, gx, gy);
-    /*<<TASK3_END>>*/
     cur = sim.cur; nxt = sim.nxt;          // 让后面的代码拿到交换后的缓冲
 
     /* ③b 烟炱按气体净流搬运（不自扩散） */
@@ -3007,7 +3005,11 @@ var 参数面板 = (function () {
   /* ============================================================ 运行控制 */
   function 推进(n) {
     var t0 = performance.now();
-    for (var i = 0; i < n; i++) 烛焰仿真.单步(sim);
+    /*<<TASK3_START>>*/
+    for (var i = 0; i < n; i++) {
+      烛焰仿真.单步(sim);
+    }
+    /*<<TASK3_END>>*/
     累计计算毫秒 += performance.now() - t0;
     计算步数 += n;
     每步毫秒 = 累计计算毫秒 / Math.max(1, 计算步数);
