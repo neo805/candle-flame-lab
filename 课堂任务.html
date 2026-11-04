@@ -43,6 +43,27 @@
   }
   textarea:focus { border-color: var(--主); background: #fff; }
   .卡脚 { display: flex; gap: 10px; align-items: center; margin-top: 10px; color: var(--淡); font-size: 12px; }
+
+  /* 红色提示 + 右侧按钮 */
+  .提示-带按钮 { display: flex; gap: 12px; align-items: flex-start; }
+  .提示-带按钮 .提示文 { flex: 1; }
+  .三维按钮 {
+    flex: none; font: inherit; font-size: 12.5px; padding: 5px 12px; cursor: pointer;
+    background: #fff; color: var(--主); border: 1px solid var(--主); border-radius: 5px;
+    white-space: nowrap; transition: .15s;
+  }
+  .三维按钮:hover { background: var(--主); color: #fff; }
+
+  /* 三维示意面板 */
+  .三维容器 { margin: 0 0 14px; border: 1px solid var(--线); border-radius: 8px; overflow: hidden; background: #fbfcfd; }
+  .三维头 {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding: 8px 12px; border-bottom: 1px solid var(--线); background: #f4f6f8; font-size: 12px;
+  }
+  .三维题 { color: #37414f; font-weight: 600; }
+  .三维注 { color: var(--淡); }
+  .三维画布 { display: block; width: 100%; height: 360px; cursor: grab; }
+  .三维画布:active { cursor: grabbing; }
   .底部条 {
     position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.96);
     border-top: 1px solid var(--线); padding: 14px 24px; display: flex; gap: 14px;
@@ -88,15 +109,25 @@
 <div class="任务卡">
   <div class="卡头"><span class="编号">任务 2</span><h2>邻接网格流动：四个方向的归一化权重</h2></div>
   <p class="题干">
-    气体在相邻两格之间交换。四个方向各能分走多少，由「总权重」决定：
-    <b>总权重 = 该方向的面积权重 + 浮力份量 + 被气流带走的份量</b>。
-    <br>四个方向的总权重加起来做分母——这样四个比例相加才正好等于 1。
+    气体在相邻两格之间交换。四个方向各能分走多少，由「流量权重」决定：
+    <b>流量权重 = 该方向的面积权重 + 浮力份量 + 被气流带走的份量</b>。
+    <br>四个方向的流量权重加起来做分母——这样四个比例相加才正好等于 1。
   </p>
-  <p class="提示">
-    <b>面积权重</b>：轴向两个面一样大，记作 <code>1.0</code>；径向一内一外，按半径算（网格越靠外，外侧面积越大）。<br>
-    <b>浮力份量</b>：热气想往上跑。向上加 <code>格.向上浮力份量</code>，向下减 <code>格.向下浮力份量</code>。<br>
-    <b>气流份量</b>：气流往哪个方向吹，就只在那个方向上做贡献，所以四个方向各有一个份量（准备阶段已经算好）。
-  </p>
+  <div class="提示 提示-带按钮">
+    <div class="提示文">
+      <b>面积权重</b>：轴向两个面一样大，记作 <code>1.0</code>；径向一内一外，按半径算（网格越靠外，外侧面积越大）。<br>
+      <b>浮力份量</b>：热气想往上跑。向上加 <code>格.向上浮力份量</code>，向下减 <code>格.向下浮力份量</code>。<br>
+      <b>气流份量</b>：气流往哪个方向吹，就只在那个方向上做贡献，所以四个方向各有一个份量（准备阶段已经算好）。
+    </div>
+    <button class="三维按钮" id="任务二三维按钮" type="button">看三维示意 ▸</button>
+  </div>
+  <div class="三维容器" id="任务二三维" hidden>
+    <div class="三维头">
+      <span class="三维题">离轴心第三列的网格（扇角放大到 12° 便于观察，实际约 5.7°）</span>
+      <span class="三维注">拖拽旋转 · 滚轮缩放 · Shift+拖拽平移 · 双击复位</span>
+    </div>
+    <canvas class="三维画布" id="任务二三维画布"></canvas>
+  </div>
   <textarea id="编2" spellcheck="false"></textarea>
   <div class="卡脚"><span>用到的份量都已由 准备流动() 算好，直接取用即可。</span></div>
 </div>
@@ -226,6 +257,317 @@ document.getElementById("写入").addEventListener("click", function () {
 });
 
 复位();
+</script>
+<script>
+/* =============================================================================
+ *  课堂任务二 · 网格三维示意图
+ *  · 高亮一格（离轴心第三列），周围用暗淡的邻居做空间参照
+ *  · 可拖拽旋转、滚轮缩放、右键/Shift 拖拽平移
+ *  · 标注 r内 / r外 / Δr / Δz / Δθ
+ *  纯 Canvas 2D 手写投影，无任何外部依赖。
+ * ============================================================================= */
+var 任务二三维 = (function () {
+  "use strict";
+
+  var 弧度 = Math.PI / 180;
+
+  /* ---------------- 几何：把「环形扇柱」近似为多棱柱 ---------------- */
+  function 建格子(r内, r外, θ0, θ1, z0, z1, 段数) {
+    var 顶 = [], 底 = [], i, θ;
+    for (i = 0; i <= 段数; i++) {
+      θ = θ0 + (θ1 - θ0) * i / 段数;
+      var c = Math.cos(θ), s = Math.sin(θ);
+      顶.push([r外 * c, r外 * s, z1]);
+      顶.push([r内 * c, r内 * s, z1]);
+      底.push([r外 * c, r外 * s, z0]);
+      底.push([r内 * c, r内 * s, z0]);
+    }
+    /* 顶点编号：顶 2i=外、2i+1=内；底 2i=外、2i+1=内（偏移 2(段数+1)） */
+    var 顶点 = 顶.concat(底);
+    var 偏 = 顶.length;
+    var 面 = [];
+    var 中心 = [(r内 + r外) / 2 * Math.cos((θ0 + θ1) / 2), (r内 + r外) / 2 * Math.sin((θ0 + θ1) / 2), (z0 + z1) / 2];
+
+    /* 外侧面 */
+    for (i = 0; i < 段数; i++) {
+      面.push({ 点: [2 * i, 2 * i + 2, 偏 + 2 * i + 2, 偏 + 2 * i], 类型: "外" });
+    }
+    /* 内侧面 */
+    for (i = 0; i < 段数; i++) {
+      面.push({ 点: [2 * i + 1, 2 * i + 3, 偏 + 2 * i + 3, 偏 + 2 * i + 1], 类型: "内" });
+    }
+    /* 两个径向侧面 */
+    面.push({ 点: [0, 偏, 偏 + 1, 1], 类型: "径向" });
+    var 末 = 2 * 段数;
+    面.push({ 点: [末, 末 + 1, 偏 + 末 + 1, 偏 + 末], 类型: "径向" });
+    /* 顶面与底面 */
+    var 顶面点 = [];
+    for (i = 0; i <= 段数; i++) { 顶面点.push(2 * i, 2 * i + 1); }
+    面.push({ 点: 顶面点, 类型: "顶" });
+    var 底面点 = [];
+    for (i = 0; i <= 段数; i++) { 底面点.push(偏 + 2 * i, 偏 + 2 * i + 1); }
+    面.push({ 点: 底面点, 类型: "底" });
+
+    return { 顶点: 顶点, 面: 面, 中心: 中心 };
+  }
+
+  /* ---------------- 画家算法所需的面深度 ---------------- */
+  function 面深度(面, 顶点, 视点) {
+    var s = 0, n = 面.点.length;
+    for (var i = 0; i < n; i++) {
+      var v = 顶点[面.点[i]];
+      s += (v[0] - 视点[0]) * 视点[0] + (v[1] - 视点[1]) * 视点[1] + (v[2] - 视点[2]) * 视点[2];
+    }
+    return s / n;
+  }
+
+  /* ---------------- 画布初始化 ---------------- */
+  function 初始化(画布, 选项) {
+    var o = 选项 || {};
+    var ctx = 画布.getContext("2d");
+    var 状态 = {
+      偏航: o.偏航 === undefined ? -0.62 : o.偏航,
+      俯仰: o.俯仰 === undefined ? 0.55 : o.俯仰,
+      缩放: 1, 平移x: 0, 平移y: 0,
+      拖拽: null, 需要重绘: true
+    };
+
+    /* 格子：第三列（r 从 2 到 3 个格宽），高 1，扇角放大到 12° */
+    var 格宽 = 1.0;
+    var r内 = 2 * 格宽, r外 = 3 * 格宽;
+    var 扇角 = 12 * 弧度;
+    var 高 = 1.0;
+
+    var 主体 = 建格子(r内, r外, 0, 扇角, 0, 高, 3);
+    /* 邻居：更暗 —— 外侧一格、内侧一格、下侧一格、下一扇区一格 */
+    var 邻居 = [
+      { 格: 建格子(r外, r外 + 格宽, 0, 扇角, 0, 高, 3), 色: "#9ab0c8" },
+      { 格: 建格子(r内 - 格宽, r内, 0, 扇角, 0, 高, 3), 色: "#9ab0c8" },
+      { 格: 建格子(r内, r外, 0, 扇角, -高, 0, 3), 色: "#a8b8c8" },
+      { 格: 建格子(r内, r外, 扇角, 2 * 扇角, 0, 高, 3), 色: "#9ab0c8" }
+    ];
+
+    /* 场景中心（用于绕中心旋转） */
+    var 中心 = [
+      (r内 + r外) / 2 * Math.cos(扇角 / 2),
+      (r内 + r外) / 2 * Math.sin(扇角 / 2),
+      高 / 2
+    ];
+
+    function 变换点(p) {
+      var x = p[0] - 中心[0], y = p[1] - 中心[1], z = p[2] - 中心[2];
+      var cy = Math.cos(状态.偏航), sy = Math.sin(状态.偏航);
+      var cx = Math.cos(状态.俯仰), sx = Math.sin(状态.俯仰);
+      /* 先绕 z 轴偏航，再绕 x 轴俯仰 */
+      var x1 = x * cy - y * sy, y1 = x * sy + y * cy, z1 = z;
+      var y2 = y1 * cx - z1 * sx, z2 = y1 * sx + z1 * cx;
+      return [x1, y2, z2];
+    }
+
+    function 投影(p, 宽, 高画) {
+      var 基 = Math.min(宽, 高画) * 0.30 * 状态.缩放;
+      var 距 = 6.2;
+      var 系 = 距 / (距 + p[2] * 0.55);
+      return {
+        x: 宽 / 2 + 状态.平移x + p[0] * 基 * 系,
+        y: 高画 / 2 + 状态.平移y - p[1] * 基 * 系,
+        深: p[2]
+      };
+    }
+
+    function 画格子(g, 面色, 面透明度, 描边色, 描边宽) {
+      var 宽 = 画布.clientWidth, 高画 = 画布.clientHeight;
+      var 顶点2 = g.顶点.map(function (v) { return 投影(变换点(v), 宽, 高画); });
+      /* 面按深度排序：远的先画 */
+      var 面表 = g.面.map(function (f) {
+        var 深 = 0;
+        f.点.forEach(function (i) { 深 += 顶点2[i].深; });
+        return { 面: f, 深: 深 / f.点.length };
+      }).sort(function (a, b) { return b.深 - a.深; });
+
+      面表.forEach(function (项) {
+        var f = 项.面;
+        ctx.beginPath();
+        f.点.forEach(function (i, k) {
+          var p = 顶点2[i];
+          if (k === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        });
+        ctx.closePath();
+        ctx.globalAlpha = 面透明度;
+        ctx.fillStyle = 面色[f.类型] || 面色.默认;
+        ctx.fill();
+        ctx.globalAlpha = Math.min(1, 面透明度 + 0.25);
+        ctx.strokeStyle = 描边色;
+        ctx.lineWidth = 描边宽;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    function 标尺(文字, 锚点, 文字偏移, 颜色) {
+      var 宽 = 画布.clientWidth, 高画 = 画布.clientHeight;
+      var p = 投影(变换点(锚点), 宽, 高画);
+      ctx.save();
+      ctx.font = "600 12px 'Microsoft YaHei', system-ui, sans-serif";
+      var w = ctx.measureText(文字).width;
+      var x = p.x + 文字偏移[0], y = p.y + 文字偏移[1];
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.fillRect(x - w / 2 - 4, y - 9, w + 8, 17);
+      ctx.fillStyle = 颜色;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(文字, x, y);
+      ctx.restore();
+    }
+
+    function 画引线(从, 到, 色, 虚线) {
+      var 宽 = 画布.clientWidth, 高画 = 画布.clientHeight;
+      var a = 投影(变换点(从), 宽, 高画), b = 投影(变换点(到), 宽, 高画);
+      ctx.save();
+      ctx.strokeStyle = 色;
+      ctx.lineWidth = 1;
+      if (虚线) ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.restore();
+    }
+
+    function 绘制() {
+      var 宽 = 画布.clientWidth, 高画 = 画布.clientHeight;
+      var 比 = window.devicePixelRatio || 1;
+      if (画布.width !== Math.round(宽 * 比) || 画布.height !== Math.round(高画 * 比)) {
+        画布.width = Math.round(宽 * 比);
+        画布.height = Math.round(高画 * 比);
+      }
+      ctx.setTransform(比, 0, 0, 比, 0, 0);
+      ctx.clearRect(0, 0, 宽, 高画);
+
+      /* 背景 */
+      var 底 = ctx.createLinearGradient(0, 0, 0, 高画);
+      底.addColorStop(0, "#fbfcfd");
+      底.addColorStop(1, "#eef2f6");
+      ctx.fillStyle = 底;
+      ctx.fillRect(0, 0, 宽, 高画);
+
+      /* 对称轴（虚线） */
+      var 轴顶 = 投影(变换点([0, 0, 高 * 2.2]), 宽, 高画);
+      var 轴底 = 投影(变换点([0, 0, -高 * 1.2]), 宽, 高画);
+      ctx.save();
+      ctx.strokeStyle = "#c2ccd6";
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(轴顶.x, 轴顶.y); ctx.lineTo(轴底.x, 轴底.y); ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.font = "11px 'Microsoft YaHei', system-ui, sans-serif";
+      ctx.fillStyle = "#93a1ae";
+      ctx.textAlign = "center";
+      ctx.fillText("对称轴", 轴顶.x, 轴顶.y - 8);
+      ctx.restore();
+
+      /* 邻居（暗淡） */
+      var 邻色 = { 外: "#b9c6d4", 内: "#b9c6d4", 径向: "#c8d3de", 顶: "#d5dde5", 底: "#c2ccd6", 默认: "#c8d3de" };
+      邻居.forEach(function (n) {
+        画格子(n.格, 邻色, 0.30, "#b3bfcb", 0.8);
+      });
+
+      /* 高亮主体 */
+      var 主色 = { 外: "#e07b39", 内: "#f0a05c", 径向: "#d96a2a", 顶: "#f7b67e", 底: "#c85a1e", 默认: "#e07b39" };
+      画格子(主体, 主色, 0.92, "#8d4416", 1.2);
+
+      /* 标注：r内 / r外 */
+      var 中θ = 扇角 / 2;
+      画引线([0, 0, 高 * 1.15], [r内 * Math.cos(中θ), r内 * Math.sin(中θ), 高 * 1.15], "#2f7d4f", true);
+      画引线([0, 0, 高 * 1.15], [r外 * Math.cos(中θ), r外 * Math.sin(中θ), 高 * 1.15], "#1f5fa0", true);
+      标尺("r内", [r内 * Math.cos(中θ), r内 * Math.sin(中θ), 高 * 1.15], [-30, -22], "#2f7d4f");
+      标尺("r外", [r外 * Math.cos(中θ), r外 * Math.sin(中θ), 高 * 1.15], [34, -22], "#1f5fa0");
+
+      /* 标注：Δr（径向厚度） */
+      标尺("Δr = r外 − r内",
+        [(r内 + r外) / 2 * Math.cos(中θ) * 1.02, (r内 + r外) / 2 * Math.sin(中θ) * 1.02, 高 * 1.02],
+        [0, -16], "#8d4416");
+
+      /* 标注：Δz（高度） */
+      标尺("Δz", [r外 * Math.cos(中θ), r外 * Math.sin(中θ), 高 * 0.5], [46, 0], "#5a6572");
+
+      /* 标注：Δθ */
+      标尺("Δθ", [r内 * 0.55 * Math.cos(中θ), r内 * 0.55 * Math.sin(中θ), 高 * 0.02], [0, 14], "#5a6572");
+    }
+
+    /* ---------------- 交互 ---------------- */
+    画布.style.touchAction = "none";
+
+    画布.addEventListener("pointerdown", function (e) {
+      画布.setPointerCapture(e.pointerId);
+      状态.拖拽 = {
+        x: e.clientX, y: e.clientY,
+        平移: e.button === 2 || e.shiftKey,
+        偏航: 状态.偏航, 俯仰: 状态.俯仰, 平移x: 状态.平移x, 平移y: 状态.平移y
+      };
+      e.preventDefault();
+    });
+
+    画布.addEventListener("pointermove", function (e) {
+      if (!状态.拖拽) return;
+      var dx = e.clientX - 状态.拖拽.x, dy = e.clientY - 状态.拖拽.y;
+      if (状态.拖拽.平移) {
+        状态.平移x = 状态.拖拽.平移x + dx;
+        状态.平移y = 状态.拖拽.平移y + dy;
+      } else {
+        状态.偏航 = 状态.拖拽.偏航 + dx * 0.008;
+        状态.俯仰 = Math.max(-1.45, Math.min(1.45, 状态.拖拽.俯仰 + dy * 0.006));
+      }
+      绘制();
+    });
+
+    function 结束拖拽(e) {
+      if (状态.拖拽) {
+        状态.拖拽 = null;
+        try { 画布.releasePointerCapture(e.pointerId); } catch (err) { }
+      }
+    }
+    画布.addEventListener("pointerup", 结束拖拽);
+    画布.addEventListener("pointercancel", 结束拖拽);
+    画布.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+    画布.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      状态.缩放 = Math.max(0.45, Math.min(3.2, 状态.缩放 * (e.deltaY > 0 ? 0.92 : 1.08)));
+      绘制();
+    }, { passive: false });
+
+    画布.addEventListener("dblclick", function () {
+      状态.偏航 = -0.62; 状态.俯仰 = 0.55; 状态.缩放 = 1; 状态.平移x = 0; 状态.平移y = 0;
+      绘制();
+    });
+
+    var 计时 = null;
+    window.addEventListener("resize", function () {
+      if (计时) clearTimeout(计时);
+      计时 = setTimeout(绘制, 100);
+    });
+
+    return { 绘制: 绘制, 状态: 状态 };
+  }
+
+  return { 初始化: 初始化 };
+})();
+
+</script>
+<script>
+(function () {
+  var 按钮 = document.getElementById("任务二三维按钮");
+  var 容器 = document.getElementById("任务二三维");
+  var 画布 = document.getElementById("任务二三维画布");
+  var 视图 = null;
+  按钮.addEventListener("click", function () {
+    容器.hidden = !容器.hidden;
+    按钮.textContent = 容器.hidden ? "看三维示意 ▸" : "收起三维示意 ▾";
+    if (!容器.hidden && !视图) {
+      视图 = 任务二三维.初始化(画布);
+    }
+    if (!容器.hidden) 视图.绘制();
+  });
+})();
 </script>
 </body>
 </html>
