@@ -3034,6 +3034,7 @@ var 参数面板 = (function () {
   /* ============================================================ 运行控制 */
   function 推进(n) {
     var t0 = performance.now();
+    var 起始步 = sim.步数;
     var nx = sim.p.nx_half, ny = sim.p.ny, gx, gy;
 
     /*<<TASK3_START>>*/
@@ -3066,6 +3067,9 @@ var 参数面板 = (function () {
     累计计算毫秒 += performance.now() - t0;
     计算步数 += n;
     每步毫秒 = 累计计算毫秒 / Math.max(1, 计算步数);
+
+    /* 实际走了几步（循环没写全时会少于 n） */
+    return sim.步数 - 起始步;
   }
 
   function 置状态(s) {
@@ -3157,8 +3161,9 @@ var 参数面板 = (function () {
     }
     if (n <= 0) return;
 
-    推进(n);
+    var 实际 = 推进(n);
     if (本段已满()) 置状态("段完成");
+    else if (实际 < n) 置状态("暂停");      // 循环没走满：停下来，等下一次点「继续」
     else if (sim.收敛) 置状态("暂停");
     刷新();
   }
