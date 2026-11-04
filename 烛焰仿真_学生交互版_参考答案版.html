@@ -3041,21 +3041,18 @@ var 参数面板 = (function () {
       /* ⓪ 开始一步：更新速度场、刷新边界 */
       烛焰仿真.开始一步(sim);
 
-      /* ① 气体扩散与传输 */
       烛焰仿真.准备输出缓冲(sim);
       for (gy = 1; gy < ny - 1; gy++)
         for (gx = 1; gx < nx; gx++)
           烛焰仿真.气体扩散与传输(sim, gx, gy);
       烛焰仿真.交换缓冲(sim);
 
-      /* ② 温度扩散 */
       烛焰仿真.准备输出缓冲(sim);
       for (gy = 1; gy < ny - 1; gy++)
         for (gx = 1; gx < nx; gx++)
           烛焰仿真.温度扩散(sim, gx, gy);
       烛焰仿真.交换缓冲(sim);
 
-      /* ③ 化学反应 */
       烛焰仿真.准备输出缓冲(sim);
       for (gy = 1; gy < ny - 1; gy++)
         for (gx = 1; gx < nx; gx++)
