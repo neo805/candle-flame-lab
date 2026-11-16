@@ -3237,7 +3237,7 @@ var parameterPanel = (function () {
 
   /* Interactive application state, rendering, and run control. */
   elements.parameterToggle.addEventListener("click", function () {
-    var collapse = elements.parameterPanel.className.indexOf("Collapse") >= 0;
+    var collapse = elements.parameterPanel.className.indexOf("collapse") >= 0;
     elements.parameterPanel.className = collapse ? "parameterPanel" : "parameterPanel collapse";
     elements.parameterToggle.textContent = collapse ? "Parameters ▾" : "Parameters ▸";
     elements.parameterToggle.setAttribute("aria-expanded", collapse ? "true" : "false");
