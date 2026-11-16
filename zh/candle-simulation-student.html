@@ -483,6 +483,22 @@ body {
 .读数组-自检 { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #dfe4ea; }
 .读数项-自检 .读数值 { color: #2b6c8f; }
 
+/* 窄屏允许纵向滚动，避免固定四列和 100vh 裁掉图表或参数。 */
+@media (max-width: 900px) {
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  body { min-height: 100vh; }
+  .页头 { flex-wrap: wrap; }
+  .工作区 { flex-direction: column; min-height: auto; }
+  .面板区 { flex: none; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: minmax(320px, 55vh); }
+  .参数栏 { flex: 0 0 auto; width: 100%; max-height: 70vh; }
+  .参数栏.收起 { display: none; }
+}
+
+@media (max-width: 560px) {
+  .面板区 { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(330px, 65vh); }
+  .工具栏 { flex-wrap: wrap; }
+}
+
 </style>
 <script>
 /* 学生代码出错时，把浏览器原生的报错显示在页面顶部。
@@ -507,6 +523,7 @@ body {
     条.appendChild(细);
     var 关 = document.createElement("button");
     关.textContent = "×";
+    关.setAttribute("aria-label", "关闭错误提示");
     关.style.cssText = "position:absolute;right:12px;top:8px;background:transparent;border:0;color:#fff;" +
       "font-size:20px;line-height:1;cursor:pointer";
     关.onclick = function () { 条.remove(); 已显示 = false; };
@@ -564,13 +581,13 @@ body {
 
 <div class="工作区">
   <main class="面板区">
-    <figure class="面板"><canvas id="cv-温度场"></canvas></figure>
-    <figure class="面板"><canvas id="cv-速度场"></canvas></figure>
-    <figure class="面板"><canvas id="cv-C2H2"></canvas></figure>
-    <figure class="面板"><canvas id="cv-CS"></canvas></figure>
-    <figure class="面板"><canvas id="cv-溢出率"></canvas></figure>
-    <figure class="面板"><canvas id="cv-O2"></canvas></figure>
-    <figure class="面板"><canvas id="cv-C25H52G"></canvas></figure>
+    <figure class="面板"><canvas id="cv-温度场" role="img" aria-label="烛焰温度场二维分布图">当前浏览器不支持画布，请查看运行读数。</canvas></figure>
+    <figure class="面板"><canvas id="cv-速度场" role="img" aria-label="速度箭头与温度底色的二维分布图">当前浏览器不支持画布，请查看运行读数。</canvas></figure>
+    <figure class="面板"><canvas id="cv-C2H2" role="img" aria-label="乙炔摩尔分数二维分布图">当前浏览器不支持画布。</canvas></figure>
+    <figure class="面板"><canvas id="cv-CS" role="img" aria-label="烟炱相对气相摩尔比二维分布图">当前浏览器不支持画布。</canvas></figure>
+    <figure class="面板"><canvas id="cv-溢出率" role="img" aria-label="等效体积溢出率二维分布图">当前浏览器不支持画布。</canvas></figure>
+    <figure class="面板"><canvas id="cv-O2" role="img" aria-label="氧气摩尔分数二维分布图">当前浏览器不支持画布。</canvas></figure>
+    <figure class="面板"><canvas id="cv-C25H52G" role="img" aria-label="气相蜡摩尔分数二维分布图">当前浏览器不支持画布。</canvas></figure>
     <section class="面板 读数卡">
       <h2 class="读数卡-标题">运行读数</h2>
       <div class="读数组">
@@ -585,10 +602,10 @@ body {
       <div class="读数项 读数项-自检"><span class="读数名">质量漂移</span><span class="读数值 读数值-小" id="信息-漂移">—</span></div>
       </div>
       <div class="进度槽"><div class="进度条" id="进度条"></div></div>
-      <div class="徽标 徽标-待机" id="信息-状态">待开始</div>
+      <div class="徽标 徽标-待机" id="信息-状态" role="status" aria-live="polite">待开始</div>
       <div class="重置提示" id="提示-重置">参数已改动，点「重置」后生效</div>
       <p class="读数卡-参数" id="参数摘要"></p>
-      <p class="读数卡-注">每跑满「每段步数」（参数面板内可调）自动暂停，按「继续」再跑一段；7 幅场图统一按 82×102 的长宽比绘制。</p>
+      <p class="读数卡-注">每跑满「每段步数」（参数面板内可调）自动暂停，按「继续」再跑一段；7 幅场图统一按当前观察窗的长宽比绘制。速度图以箭头表示速度、底色表示温度。</p>
     </section>
   </main>
 
@@ -1174,17 +1191,17 @@ var 烛焰仿真 = (function () {
     for (k = 0; k < sim.单元数; k++) st[k * 步 + 5 + 组分.CS] = cs[k] > 0 ? cs[k] : 0;
   }
 
-  /* 边界幽灵格跟随相邻内格的温度：保持空气成分与 1 atm，但物质的量与内格一致，
-     于是内外质量交换的净额为零（否则幽灵格永远是 300K 稠密空气，会不断向内注质量）。 */
+  /* 顶部与外侧幽灵格跟随相邻内格的温度，并按 1 atm 重新计算空气物质的量，
+     避免幽灵格永远是 300K 稠密空气而不断向内注质量；底部仍是轴对称镜像边界。 */
   function 边界刷新(sim, st) {
     var p = sim.p;
     if (!p.边界跟随温度) return;
     var nx = p.nx_half, ny = sim.ny, gx, gy, b, 邻, T, n总, i;
     for (gx = 0; gx < nx; gx++) {
-      b = 序号(0, gx, nx);
-      邻 = 序号(1, 邻近列(gx, nx), nx);
+      b = 序号(ny - 1, gx, nx);
+      邻 = 序号(ny - 2, 邻近列(gx, nx), nx);
       T = st[邻 + 偏移.T];
-      n总 = p.P_atm * p.体积[gx] / (p.R_gas * T);
+      n总 = p.P_atm * p.体积[(ny - 1) * nx + gx] / (p.R_gas * T);
       st[b + 偏移.T] = T;
       st[b + 5 + 组分.N2] = p.空气中氮气占比 * n总;
       st[b + 5 + 组分.O2] = p.空气中氧气占比 * n总;
@@ -1469,8 +1486,8 @@ var 烛焰仿真 = (function () {
     }
     if (蜡温[顶] < p.T_amb) 蜡温[顶] = p.T_amb;
 
-    sim.本步蒸发 = 蒸发量;
-    /* ④ 气相侧：被取走 Q气 的热，并接收蒸发出来的蜡蒸气（含其显热） */
+    /* 先保留相变需求，再应用液蜡库存与气相饱和限额；未用于蒸发的热量留在灯芯。 */
+    var 相变需求 = 蒸发量;
     if (蒸发量 > 0) {
       var 液蜡 = st[b + 5 + 组分.C25H52_Liquid];
       if (蒸发量 > 液蜡) 蒸发量 = 液蜡;
@@ -1484,6 +1501,12 @@ var 烛焰仿真 = (function () {
         if (蒸发量 > 余) 蒸发量 = 余;
       }
     }
+    if (蒸发量 < 相变需求) {
+      蜡温[顶] = Math.min(p.T_Cal_max, 蜡温[顶] + (相变需求 - 蒸发量) * 汽化热 / p.蜡柱热容);
+    }
+    sim.本步蒸发 = 蒸发量;
+
+    /* ④ Q气 是气相传给灯芯的热量，始终从气相扣除；蒸发蒸气再带回其显热。 */
     var T气新 = T气 - Q气 / 热容气;
     if (蒸发量 > 0) {
       var cp汽 = 单组分热容(组分.C25H52_Gas, 蜡温[顶]);
@@ -1566,10 +1589,12 @@ var 烛焰仿真 = (function () {
   /* 反应前的准备（已封装）：取本格组分、算六个反应各能推进多少；不满足条件返回 null */
   function 准备反应(sim, gx, gy) {
     var p = sim.p, cur = sim.cur, nx = sim.nx;
+    if (是实心蜡柱(sim, gy, gx)) return null;       // 实心段只做柱内导热，内部气相残余不参与反应
     var b = 序号(gy, gx, nx);
     if (p.启用1D灯芯 && cur[b + 偏移.类型] === 单元类型.烛芯 && gy > p.蜡柱行止) return null;
     var T = cur[b + 偏移.T];
-    if (T < p.最低反应阈值) return null;
+    /* 平滑门可在阈值以下的过渡带内部分启动，快速跳过必须使用同一下界。 */
+    if (T < p.最低反应阈值 - p.阈值过渡宽度) return null;
 
     var 反应前 = sim._反应前, 反应后 = sim._反应后, i, r;
     for (i = 0; i < 组分数; i++) 反应前[i] = cur[b + 5 + i];
@@ -1652,7 +1677,7 @@ var 烛焰仿真 = (function () {
       var 份额 = p.烟炱只随对流 ? 0 : 1;   // 开启时①不搬烟炱，全部交给 ③b 的净流搬运，避免走两遍
       组分入[组分.CS] += 烟 * 份额;
       for (var k = 0; k < 组分数; k++) if (k !== 组分.CS) 组分入[k] += 流[1 + k];
-      return 流[0] - 烟 + 烟 * 份额;
+      return 流[0];                                    // 与累加出一致：流[0]只包含气相，烟炱不能重复扣除
     }
     邻接网格流动(sim, gx, gy + 1, gx, gy, 流); 入上 = 累加入(流); 入焓 += 流[0] * 流[10];
     邻接网格流动(sim, gx, gy - 1, gx, gy, 流); 入下 = 累加入(流); 入焓 += 流[0] * 流[10];
@@ -1699,8 +1724,8 @@ var 烛焰仿真 = (function () {
     T新 = 钳位(T新, p.T_amb, p.T_Cal_max);
     nxt[b + 偏移.T] = T新;
 
-    /* 烟炱：随气流输运 + 重力沉降 */
-    var Cs出 = n气 > 0 ? 总出 * (Cs / n气) : 0;
+    /* 烟炱：普通扩散与净对流搬运二选一；开启“只随对流”时全部交给结束一步的守恒搬运。 */
+    var Cs出 = p.烟炱只随对流 ? 0 : (n气 > 0 ? 总出 * (Cs / n气) : 0);
     var Cs入 = 组分入[组分.CS];
     var 上邻Cs = cur[序号(gy + 1, gx, nx) + 5 + 组分.CS];
     var 沉降 = p.烟炱沉降系数 * (上邻Cs - Cs);
@@ -1712,7 +1737,7 @@ var 烛焰仿真 = (function () {
   function 温度扩散(sim, gx, gy) {
     var p = sim.p, cur = sim.cur, nxt = sim.nxt, nx = p.nx_half;
     var b = 序号(gy, gx, nx);
-    if (cur[b + 偏移.类型] === 单元类型.边界) return;
+    if (cur[b + 偏移.类型] === 单元类型.边界 || 是实心蜡柱(sim, gy, gx)) return;
 
     var T = cur[b + 偏移.T];
     var gx内 = 邻近列(gx + 1, nx), gx外 = 邻近列(gx - 1, nx);
@@ -1720,6 +1745,12 @@ var 烛焰仿真 = (function () {
     var T外 = cur[序号(gy, gx外, nx) + 偏移.T];
     var T上 = cur[序号(gy + 1, gx, nx) + 偏移.T];
     var T下 = cur[序号(gy - 1, gx, nx) + 偏移.T];
+
+    /* 实心段只使用独立的1D柱内导热；面对实心格的气相热通量为零。 */
+    if (是实心蜡柱(sim, gy, gx内)) T内 = T;
+    if (是实心蜡柱(sim, gy, gx外)) T外 = T;
+    if (是实心蜡柱(sim, gy + 1, gx)) T上 = T;
+    if (是实心蜡柱(sim, gy - 1, gx)) T下 = T;
 
     var 梯度 = ((T内 - T) + (T外 - T) + (T下 - T) + (T上 - T)) / 4.0;
     var T新 = T + p.热扩散系数 * 梯度;
@@ -1890,6 +1921,7 @@ var 烛焰仿真 = (function () {
     var nx全 = W.列数 * 2, 行数 = W.行数;
     目标.nx全 = nx全; 目标.ny = 行数;
     var T = 目标.T, 气总 = 目标.气总, 溢出 = 目标.溢出;
+    var 烟炱浓度 = 目标.烟炱浓度;
     var vz场 = 目标.vz, vr场 = 目标.vr, 组分场 = 目标.组分场;
     var p = sim.p;
     for (var gy = W.gy0; gy <= W.gy1; gy++) {
@@ -1914,6 +1946,8 @@ var 烛焰仿真 = (function () {
           var V实际 = 气 * p.R_gas * t / p.P_atm;
           var V几何 = p.体积[gy * nx + gx];
           溢出[idx] = V几何 > 0 ? (V实际 - V几何) / V几何 * 100.0 : 0;
+          /* 固体烟炱按单位体积摩尔浓度显示，消除网格大小对颜色的影响 */
+          if (烟炱浓度) 烟炱浓度[idx] = V几何 > 0 ? st[b + 5 + 组分.CS] / V几何 : 0;
 
           if (vz场) vz场[idx] = st[b + 偏移.vz];
           if (vr场) vr场[idx] = side === 0 ? -st[b + 偏移.vr] : st[b + 偏移.vr];
@@ -2459,6 +2493,7 @@ var 参数面板 = (function () {
         }
         行.appendChild(表);
       }
+      行.同步 = function () { };          // 只读项保持统一控件接口，恢复标准答案时无需改写
       return 行;
     }
     var 数 = document.createElement("input");
@@ -2641,7 +2676,7 @@ var 参数面板 = (function () {
       回填: function (新基准) {
         for (var 键 in 控件表) {
           if (!Object.prototype.hasOwnProperty.call(控件表, 键)) continue;
-          if (新基准[键] !== undefined) 控件表[键].同步(新基准[键]);
+          if (新基准[键] !== undefined && typeof 控件表[键].同步 === "function") 控件表[键].同步(新基准[键]);
         }
       }
     };
@@ -2664,12 +2699,12 @@ var 参数面板 = (function () {
   var 标准答案 = {
     网格缩放: 8, 域半径mm: 20, 域高mm: 60, 烛芯距底mm: 5,
     精细半径mm: 12, 外区增长: 1.25,
-    观察窗半径mm: 2.7, 观察窗上mm: 6, 观察窗下mm: 2,
-    轴向稀疏起点mm: 6, 轴向增长: 1.25,
+    观察窗半径mm: 2.7, 观察窗上mm: 14, 观察窗下mm: 2,
+    轴向稀疏起点mm: 16, 轴向增长: 1.25,
     启用1D灯芯: true, 蜡柱导热: 0.005, 灯芯顶换热率: 0.4, 蜡柱热容倍率: 0.05,
     启用热容修正: true, 种子比例: 0.06,
     浮力上升系数: 0, 启用物理速度: true, 物理时间步: 0.00375,
-    速度阻尼: 0.12, 卷吸系数: 0.0,
+    速度阻尼: 0.24, 卷吸系数: 0.0,
     气体扩散系数: 0.035, 热扩散系数: 0.004, 热辐射散热系数: 0.002,
     烟炱沉降系数: 0, 烟炱只随对流: true, 反应松弛系数: 1.0,
     烛芯流量: 0.030, T_Cal_max: 2700,
@@ -2750,14 +2785,14 @@ var 参数面板 = (function () {
     var 温度映射 = function (场) {
       return {
         数据: 场.T, 色标: "烛焰",
-        归一化: function (v) { return 色标库.线性(v, 300, 3000); }
+        归一化: function (v) { return 色标库.线性(v, 300, 2400); }
       };
     };
-    var 温度刻度 = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000].map(function (v) {
-      return { t: 色标库.线性(v, 300, 3000), 文字: String(v) };
+    var 温度刻度 = [300, 600, 900, 1200, 1500, 1800, 2100, 2400].map(function (v) {
+      return { t: 色标库.线性(v, 300, 2400), 文字: String(v) };
     });
     /* 组分面板：量程与稳态版一致，可按面板单独指定上下限 */
-    function 组分定义(id, 写法, 下标, 色标, 下限, 上限) {
+    function 组分定义(id, 写法, 下标, 色标, 下限, 上限, 量名) {
       var 低 = 下限 || 1e-10, 高 = 上限 || 1e-2;
       var 刻 = [];
       var 启 = Math.log10(低), 跨 = Math.log10(高) - 启;
@@ -2767,7 +2802,7 @@ var 参数面板 = (function () {
       }
       return {
         画布: document.getElementById(id), 环境: 环境,
-        标题: 写法 + " 摩尔分数", 色标: 色标, 色标单位: "—", 色标刻度: 刻,
+        标题: 写法 + " " + (量名 || "摩尔分数"), 色标: 色标, 色标单位: "—", 色标刻度: 刻,
         映射: function (场) {
           return {
             数据: 场.组分场[下标], 色标: 色标,
@@ -2824,8 +2859,25 @@ var 参数面板 = (function () {
         等比: true
       },
       C25H52G: 组分定义("cv-C25H52G", "C₂₅H₅₂(g)", 6, "Oranges"),
-      C2H2: 组分定义("cv-C2H2", "C₂H₂", 2, "YlOrRd"),
-      CS: 组分定义("cv-CS", "C(s) 烟炱", 8, "Greys", 1e-13, 1e-1)
+      C2H2: 组分定义("cv-C2H2", "C₂H₂", 2, "YlOrRd", 1e-10, 1e-2, "气相摩尔分数"),
+      /* 烟炱是固体，不用“除以气相总量”的摩尔分数：那会把气体稀薄处放大成假烟柱。
+         按单位体积固体碳摩尔量显示，避免粗细网格的体积差异扭曲颜色。 */
+      CS: {
+        画布: document.getElementById("cv-CS"), 环境: 环境,
+        标题: "C(s) 烟炱 浓度",
+        副标题: function () { return "单位 mol/m³ · 固体碳"; },
+        色标: "Greys", 色标单位: "mol/m³",
+        色标刻度: [1e-3, 1e-1, 10].map(function (v) {
+          return { t: 色标库.对数(v, 1e-3, 10), 文字: String(v) };
+        }),
+        映射: function (场) {
+          return {
+            数据: 场.烟炱浓度, 色标: "Greys",
+            归一化: function (v) { return 色标库.对数(v, 1e-3, 10); }
+          };
+        },
+        等比: true
+      }
     };
   }
 
@@ -2835,7 +2887,7 @@ var 参数面板 = (function () {
       nx全: 宽, ny: 高,
       T: new Float64Array(宽 * 高), 气总: new Float64Array(宽 * 高),
       溢出: new Float64Array(宽 * 高), vz: new Float64Array(宽 * 高),
-      vr: new Float64Array(宽 * 高), 组分场: {}
+      vr: new Float64Array(宽 * 高), 烟炱浓度: new Float64Array(宽 * 高), 组分场: {}
     };
     for (var i = 0; i < 9; i++) f.组分场[i] = new Float64Array(宽 * 高);
     return f;
@@ -2858,6 +2910,7 @@ var 参数面板 = (function () {
       : sim.p.烛芯_gy;
     初始统计();
     累计计算毫秒 = 0; 计算步数 = 0; 每步毫秒 = 0;
+    上次总气 = -1; 上次总气步 = 0; 质量漂移 = 0;
     段起 = 0;
     待重置 = false;
     状态 = "初始";
@@ -3014,11 +3067,12 @@ var 参数面板 = (function () {
   /*<<TASK3_END>>*/
 
     累计计算毫秒 += performance.now() - t0;
-    计算步数 += n;
+    var 实际步数 = sim.步数 - 起始步;
+    计算步数 += 实际步数;
     每步毫秒 = 累计计算毫秒 / Math.max(1, 计算步数);
 
-    /* 实际走了几步（循环没写全时会少于 n） */
-    return sim.步数 - 起始步;
+    /* 实际走了几步（循环没写全时会少于 n），性能计数也按实际步数累计 */
+    return 实际步数;
   }
 
   function 置状态(s) {
@@ -3100,7 +3154,7 @@ var 参数面板 = (function () {
     /* 不再限制速度：每帧用固定计算预算尽量多推（约 12ms，保证界面仍可响应） */
     var n = 每步毫秒 > 0
       ? Math.max(1, Math.min(800, Math.floor(12 / 每步毫秒)))
-      : 60;
+      : 1;                         // 尚未测得单步耗时时先试一步，避免首帧长时间阻塞
     累计 = 0;
 
     var L = 界面.每段步数;
@@ -3108,7 +3162,11 @@ var 参数面板 = (function () {
       var 余 = L - (sim.步数 - 段起);
       if (n > 余) n = 余;
     }
-    if (n <= 0) return;
+    if (n <= 0) {
+      /* 运行中调小每段步数时立即结算当前段，避免按钮仍显示运行却永远不再推进。 */
+      if (本段已满()) { 置状态("段完成"); 刷新(); }
+      return;
+    }
 
     var 实际 = 推进(n);
     if (本段已满()) 置状态("段完成");

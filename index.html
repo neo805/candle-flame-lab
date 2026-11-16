@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="轴对称烛焰温度场教学仿真：在浏览器中完成六反应、邻接网格权重与主循环三项课堂任务。An axisymmetric candle-flame teaching simulation.">
+  <meta name="theme-color" content="#132c33">
+  <title>烛焰温度场仿真 · Candle-Flame Simulation for Teaching</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172b31;
+      --muted: #5d6d70;
+      --paper: #f5f3ed;
+      --surface: #fffefb;
+      --deep: #132c33;
+      --deep-2: #1b3a42;
+      --line: #dcded7;
+      --accent: #d65f32;
+      --accent-dark: #a94320;
+      --accent-soft: #fae8dd;
+      --mint: #a9d6c7;
+      --radius: 18px;
+      --shadow: 0 18px 50px rgba(23, 43, 49, .08);
+      --content: 1160px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    a:focus-visible {
+      outline: 3px solid #e99162;
+      outline-offset: 4px;
+      border-radius: 4px;
+    }
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 10px;
+      left: 10px;
+      padding: 10px 16px;
+      background: var(--surface);
+      color: var(--ink);
+      transform: translateY(-160%);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .wrap { width: min(calc(100% - 48px), var(--content)); margin-inline: auto; }
+
+    .site-header {
+      position: sticky;
+      z-index: 20;
+      top: 0;
+      border-bottom: 1px solid rgba(220, 222, 215, .85);
+      background: rgba(245, 243, 237, .94);
+      backdrop-filter: blur(14px);
+    }
+    .nav { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; font-weight: 750; letter-spacing: -.02em; }
+    .brand-mark {
+      display: grid;
+      width: 34px;
+      height: 40px;
+      place-items: center;
+      border-radius: 55% 45% 58% 42% / 65% 50% 50% 35%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      transform: rotate(5deg);
+    }
+    .brand small { display: block; color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .12em; }
+    .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; }
+    .nav-links a { text-decoration: none; }
+    .nav-links a:not(.nav-repo):hover { color: var(--accent-dark); }
+    .nav-repo { padding: 8px 14px; border: 1px solid #c9cec8; border-radius: 999px; }
+    .nav-repo:hover { border-color: var(--ink); background: var(--surface); }
+
+    .hero { padding: 72px 0 54px; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.16fr) minmax(340px, .84fr); gap: 64px; align-items: center; }
+    .eyebrow { margin: 0 0 16px; color: var(--accent-dark); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { max-width: 720px; margin: 0; font-size: clamp(38px, 5vw, 64px); line-height: 1.12; letter-spacing: -.055em; }
+    .hero-en { max-width: 650px; margin: 18px 0 0; color: #40575c; font-size: clamp(18px, 2vw, 23px); line-height: 1.42; letter-spacing: -.02em; }
+    .hero-copy { max-width: 670px; margin: 22px 0 0; color: var(--muted); font-size: 16px; }
+    .hero-copy span { display: block; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .button {
+      display: inline-flex;
+      min-height: 46px;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .button-primary { background: var(--accent); color: #fff; }
+    .button-primary:hover { background: var(--accent-dark); }
+    .button-secondary { border-color: #c9cec8; background: transparent; }
+    .button-secondary:hover { background: var(--surface); border-color: #8f9b99; }
+    .status { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+    .status span::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+
+    .model-card { position: relative; overflow: hidden; padding: 30px; border-radius: 24px; background: var(--deep); color: #f9fbf7; box-shadow: var(--shadow); }
+    .model-card::before {
+      content: "";
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      right: -90px;
+      top: -110px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(214, 95, 50, .55), rgba(214, 95, 50, 0) 68%);
+    }
+    .model-top { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,.14); }
+    .model-label { color: var(--mint); font-size: 11px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    .model-top strong { display: block; margin-top: 5px; font-size: 20px; }
+    .axis-badge { flex: none; padding: 5px 10px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; color: #dce8e4; font-size: 11px; }
+    .model-steps { position: relative; display: grid; gap: 18px; margin: 24px 0; padding: 0; list-style: none; }
+    .model-steps li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
+    .step-no { color: #ef9c73; font: 700 12px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .model-steps strong { display: block; font-size: 14px; }
+    .model-steps small { display: block; margin-top: 2px; color: #b8c9c8; font-size: 12px; }
+    .model-stats { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.14); }
+    .model-stats strong { display: block; color: #fff; font-size: 22px; line-height: 1.2; }
+    .model-stats span { color: #b8c9c8; font-size: 11px; }
+
+    section { padding: 58px 0; }
+    .section-head { display: grid; grid-template-columns: minmax(0, .85fr) minmax(300px, 1.15fr); gap: 40px; align-items: end; margin-bottom: 28px; }
+    h2 { margin: 0; font-size: clamp(27px, 3.2vw, 38px); line-height: 1.2; letter-spacing: -.035em; }
+    h2 .en { display: block; margin-top: 6px; color: var(--muted); font-size: .46em; font-weight: 550; letter-spacing: -.01em; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 14px; }
+    .section-head p span { display: block; }
+
+    .materials { border-block: 1px solid var(--line); background: rgba(255, 254, 251, .58); }
+    .language-block + .language-block { margin-top: 38px; }
+    .language-title { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; font-size: 14px; }
+    .language-title::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+    .tag { display: inline-flex; align-items: center; width: fit-content; padding: 3px 9px; border-radius: 999px; background: #e5efea; color: #285e50; font-size: 11px; font-weight: 750; white-space: nowrap; }
+    .tag-planned { background: #eeeee9; color: #6b716e; }
+    .doc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .doc-card {
+      position: relative;
+      display: flex;
+      min-height: 172px;
+      flex-direction: column;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      text-decoration: none;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    .doc-card:hover { transform: translateY(-3px); border-color: #b8bcb3; box-shadow: 0 12px 30px rgba(23, 43, 49, .07); }
+    .doc-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .doc-index { color: var(--accent-dark); font: 750 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .doc-card h3 { margin: 17px 0 7px; font-size: 17px; line-height: 1.35; }
+    .doc-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .doc-link { margin-top: auto; padding-top: 16px; color: var(--accent-dark); font-size: 12px; font-weight: 750; }
+    .planned-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+
+    .task-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .task-card { padding: 26px; border-top: 3px solid var(--accent); border-radius: 4px 4px var(--radius) var(--radius); background: var(--surface); box-shadow: 0 1px 0 var(--line); }
+    .task-number { color: var(--accent-dark); font: 750 12px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; }
+    .task-card h3 { margin: 18px 0 10px; font-size: 20px; line-height: 1.4; }
+    .task-card h3 span { display: block; margin-top: 3px; color: var(--muted); font-size: 13px; font-weight: 550; }
+    .task-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .task-card p + p { margin-top: 10px; }
+
+    .limits { background: var(--deep); color: #f7faf6; }
+    .limits .section-head p, .limits h2 .en { color: #b8c9c8; }
+    .warning { display: grid; grid-template-columns: auto 1fr; gap: 16px; margin-bottom: 28px; padding: 22px 24px; border: 1px solid rgba(239, 156, 115, .42); border-radius: 14px; background: rgba(214, 95, 50, .1); }
+    .warning-mark { color: #ef9c73; font-size: 22px; line-height: 1.4; }
+    .warning strong { color: #fff; }
+    .warning p { margin: 0; color: #d9e3df; font-size: 14px; }
+    .warning p + p { margin-top: 9px; }
+    .limit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 28px; margin: 0; padding: 0; list-style: none; }
+    .limit-grid li { padding-top: 16px; border-top: 1px solid rgba(255,255,255,.16); }
+    .limit-grid strong { display: block; font-size: 14px; }
+    .limit-grid span { display: block; margin-top: 5px; color: #b8c9c8; font-size: 12px; }
+
+    .start-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .start-card { padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .start-card h3 { margin: 0 0 10px; font-size: 20px; }
+    .start-card h3 span { display: block; color: var(--muted); font-size: 13px; font-weight: 500; }
+    .start-card p { color: var(--muted); font-size: 13px; }
+    .start-card code { padding: 2px 6px; border-radius: 5px; background: #efefe9; color: #36494d; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; overflow-wrap: anywhere; }
+    .text-link { color: var(--accent-dark); font-weight: 750; text-underline-offset: 3px; }
+
+    .closing { padding: 34px 0 50px; border-top: 1px solid var(--line); }
+    .closing-inner { display: flex; align-items: center; justify-content: space-between; gap: 28px; }
+    .closing h2 { font-size: 25px; }
+    .closing p { max-width: 700px; margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .closing-actions { display: flex; flex: none; gap: 10px; }
+
+    footer { padding: 24px 0 34px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .footer-inner { display: flex; justify-content: space-between; gap: 24px; }
+    .footer-inner p { margin: 0; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
+    .footer-links a { text-underline-offset: 3px; }
+
+    @media (max-width: 900px) {
+      .hero { padding-top: 50px; }
+      .hero-grid { grid-template-columns: 1fr; gap: 38px; }
+      .model-card { max-width: 650px; }
+      .section-head { grid-template-columns: 1fr; gap: 14px; align-items: start; }
+      .task-grid, .limit-grid { grid-template-columns: 1fr; }
+      .task-card h3 span { font-size: 14px; }
+      .limit-grid { gap: 18px; }
+      .closing-inner { align-items: flex-start; flex-direction: column; }
+    }
+    @media (max-width: 640px) {
+      .wrap { width: min(calc(100% - 32px), var(--content)); }
+      .nav { min-height: 64px; }
+      .brand small { display: none; }
+      .brand-text { max-width: 120px; line-height: 1.25; }
+      .nav-links { gap: 12px; font-size: 12px; }
+      .nav-links > a:first-child { display: none; }
+      .nav-repo { padding: 6px 10px; }
+      .hero { padding: 40px 0 38px; }
+      h1 { font-size: 39px; }
+      .hero-copy { font-size: 14px; }
+      .actions { align-items: stretch; flex-direction: column; }
+      .button { width: 100%; }
+      .model-card { padding: 24px; }
+      section { padding: 42px 0; }
+      .doc-grid, .start-grid { grid-template-columns: 1fr; }
+      .doc-card { min-height: 160px; }
+      .warning { grid-template-columns: 1fr; gap: 6px; padding: 20px; }
+      .closing-actions { width: 100%; flex-direction: column; }
+      .footer-inner { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .doc-card { transition: none; }
+      .doc-card:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容 / Skip to content</a>
+
+  <header class="site-header">
+    <nav class="nav wrap" aria-label="主导航 / Main navigation">
+      <a class="brand" href="#top" aria-label="返回页首 / Back to top">
+        <span class="brand-mark" aria-hidden="true">CF</span>
+        <span class="brand-text">烛焰温度场仿真<small>CANDLE-FLAME LAB</small></span>
+      </a>
+      <div class="nav-links">
+        <a href="#materials">中文材料</a>
+        <a href="#english">English</a>
+        <a href="#limits">模型边界</a>
+        <a class="nav-repo" href="https://github.com/neo805/candle-flame-lab" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <div class="hero wrap" id="top">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Axisymmetric model · Browser-based teaching</p>
+          <h1>从三处代码，<br>理解一场烛焰仿真。</h1>
+          <p class="hero-en" lang="en">An axisymmetric candle-flame temperature-field simulation for modeling and programming education.</p>
+          <p class="hero-copy">
+            观察场量、补全模型、运行结果。六反应、邻接网格权重与主循环三项任务，让离散建模成为可操作的课堂练习。
+            <span lang="en">Inspect fields, complete the model, and run the result—no installation or build tools required.</span>
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="zh/candle-simulation-student.html">打开学生仿真 <span aria-hidden="true">→</span></a>
+            <a class="button button-secondary" href="zh/classroom-tasks.html">进入课堂任务</a>
+            <a class="button button-secondary" href="https://github.com/neo805/candle-flame-lab" target="_blank" rel="noopener noreferrer">GitHub 仓库 ↗</a>
+          </div>
+          <div class="status" aria-label="项目状态">
+            <span>原教学活动与中文材料已完成</span>
+            <span lang="en">Chinese and English editions available</span>
+          </div>
+        </div>
+
+        <aside class="model-card" aria-label="模型结构 / Model structure">
+          <div class="model-top">
+            <div><span class="model-label">From code to field</span><strong>模型如何前进一步</strong></div>
+            <span class="axis-badge">r–z · 2D axisymmetric</span>
+          </div>
+          <ol class="model-steps">
+            <li><span class="step-no">01</span><div><strong>气体输运 / Gas transport</strong><small>相邻网格交换 · neighboring-cell exchange</small></div></li>
+            <li><span class="step-no">02</span><div><strong>温度扩散 / Temperature diffusion</strong><small>固定体积网格上的热输运</small></div></li>
+            <li><span class="step-no">03</span><div><strong>化学反应 / Chemical reaction</strong><small>六反应计量与焓变 · stoichiometry &amp; enthalpy</small></div></li>
+          </ol>
+          <div class="model-stats">
+            <div><strong>6</strong><span>简化反应 / reactions</span></div>
+            <div><strong>3</strong><span>课堂任务 / tasks</span></div>
+            <div><strong>0</strong><span>安装步骤 / installs</span></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <section class="materials" id="materials" aria-labelledby="materials-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="materials-title">教学材料<span class="en" lang="en">Open a document. Start exploring.</span></h2>
+          <p>中文与英文 HTML 均可直接打开；学生版用于实践，参考答案版用于核对。<span lang="en">Chinese and English editions are ready to open. Student editions contain intentional code placeholders.</span></p>
+        </div>
+
+        <div class="language-block">
+          <h3 class="language-title">中文材料 <span class="tag">已发布</span></h3>
+          <div class="doc-grid">
+            <a class="doc-card" href="zh/candle-simulation-student.html">
+              <div class="doc-card-top"><span class="doc-index">SIM / 01</span><span class="tag">学生版</span></div>
+              <h3>烛焰仿真 · 学生交互版</h3>
+              <p>含有意保留的课堂代码占位；完整燃烧演示请打开参考答案版。</p>
+              <span class="doc-link">打开 HTML →</span>
+            </a>
+            <a class="doc-card" href="zh/candle-simulation-reference.html">
+              <div class="doc-card-top"><span class="doc-index">SIM / 02</span><span class="tag">参考答案</span></div>
+              <h3>烛焰仿真 · 学生交互版参考答案</h3>
+              <p>已完成课堂代码的交互仿真，供核对与教师演示。</p>
+              <span class="doc-link">打开 HTML →</span>
+            </a>
+            <a class="doc-card" href="zh/classroom-tasks.html">
+              <div class="doc-card-top"><span class="doc-index">TASK / 01</span><span class="tag">学生版</span></div>
+              <h3>课堂任务</h3>
+              <p>补全三段真正参与计算的代码，并生成自己的仿真文件。</p>
+              <span class="doc-link">打开 HTML →</span>
+            </a>
+            <a class="doc-card" href="zh/classroom-tasks-reference.html">
+              <div class="doc-card-top"><span class="doc-index">TASK / 02</span><span class="tag">参考答案</span></div>
+              <h3>课堂任务 · 参考答案</h3>
+              <p>三项任务的参考实现，建议在独立尝试后使用。</p>
+              <span class="doc-link">打开 HTML →</span>
+            </a>
+            <a class="doc-card" href="zh/candle-simulation-math.html">
+              <div class="doc-card-top"><span class="doc-index">DOC / 01</span><span class="tag">算法说明</span></div>
+              <h3>数学与化学算法说明</h3>
+              <p>从状态量、输运、六反应到灯芯与烟炱，逐条解释当前实现与参数。</p>
+              <span class="doc-link">打开 HTML →</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="language-block" id="english" lang="en">
+          <h3 class="language-title">English editions <span class="tag">Available</span></h3>
+          <div class="doc-grid">
+            <a class="doc-card" href="en/candle-simulation-student.html">
+              <div class="doc-card-top"><span class="doc-index">SIM / 01</span><span class="tag">Student</span></div>
+              <h3>Student simulation</h3>
+              <p>Contains intentional classroom code placeholders; open the reference edition for the complete flame.</p>
+              <span class="doc-link">Open HTML →</span>
+            </a>
+            <a class="doc-card" href="en/candle-simulation-reference.html">
+              <div class="doc-card-top"><span class="doc-index">SIM / 02</span><span class="tag">Reference</span></div>
+              <h3>Simulation reference</h3>
+              <p>The completed interactive version for checking and demonstration.</p>
+              <span class="doc-link">Open HTML →</span>
+            </a>
+            <a class="doc-card" href="en/classroom-tasks.html">
+              <div class="doc-card-top"><span class="doc-index">TASK / 01</span><span class="tag">Student</span></div>
+              <h3>Classroom tasks</h3>
+              <p>Three executable code-completion tasks for the classroom.</p>
+              <span class="doc-link">Open HTML →</span>
+            </a>
+            <a class="doc-card" href="en/classroom-tasks-reference.html">
+              <div class="doc-card-top"><span class="doc-index">TASK / 02</span><span class="tag">Reference</span></div>
+              <h3>Classroom tasks reference</h3>
+              <p>Reference implementations for all three classroom tasks.</p>
+              <span class="doc-link">Open HTML →</span>
+            </a>
+            <a class="doc-card" href="en/candle-simulation-math.html">
+              <div class="doc-card-top"><span class="doc-index">DOC / 01</span><span class="tag">Methods</span></div>
+              <h3>Mathematical and chemical methods</h3>
+              <p>State variables, transport, six reactions, wick, soot, and current parameters.</p>
+              <span class="doc-link">Open HTML →</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tasks" aria-labelledby="tasks-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="tasks-title">三项课堂任务<span class="en" lang="en">Three tasks inside the working model</span></h2>
+          <p>不是独立练习题，而是会实际运行的模型片段。<span lang="en">Each task modifies JavaScript that participates in the simulation itself.</span></p>
+        </div>
+        <div class="task-grid">
+          <article class="task-card">
+            <span class="task-number">TASK 01 · CHEMISTRY</span>
+            <h3>六反应与焓变<span lang="en">Six reactions &amp; enthalpy</span></h3>
+            <p>补全 R2–R6 的组分消耗、生成与反应焓变，理解符号、单位和能量变化。</p>
+            <p lang="en">Complete stoichiometry and enthalpy changes, connecting species production and consumption with energy.</p>
+          </article>
+          <article class="task-card">
+            <span class="task-number">TASK 02 · TRANSPORT</span>
+            <h3>邻接网格权重<span lang="en">Neighbor-cell weights</span></h3>
+            <p>用面积、浮力与气流份量构造四方向权重，并归一化交换比例。</p>
+            <p lang="en">Build and normalize four directional exchange weights from geometry, buoyancy, and flow.</p>
+          </article>
+          <article class="task-card">
+            <span class="task-number">TASK 03 · TIME LOOP</span>
+            <h3>仿真主循环<span lang="en">Main simulation loop</span></h3>
+            <p>补全温度扩散、化学反应、循环条件与步进，理清每一步的更新顺序。</p>
+            <p lang="en">Complete the calls, condition, and increment that advance the solution step by step.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="limits" id="limits" aria-labelledby="limits-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="limits-title">教学模型，不是预测工具<span class="en" lang="en">A teaching model, not a predictive safety tool</span></h2>
+          <p>用于解释建模结构、比较趋势和检查代码；不用于定量科研、工程设计或安全预测。<span lang="en">Use it to learn model structure—not to predict real fire behavior or assess safety.</span></p>
+        </div>
+        <div class="warning" role="note" aria-label="溢出率说明 / Overflow-rate clarification">
+          <span class="warning-mark" aria-hidden="true">※</span>
+          <div>
+            <p><strong>“溢出率”不是实际质量泄漏。</strong>它是 <code>nRT/(P_atm V_cell)−1</code> 所表示的 1 atm 等效体积偏差，也可理解为固定体积下的相对压力偏差；当前模型没有等压约束或压力投影。非均匀网格交换、温升和反应摩尔数变化都可能放大读数。</p>
+            <p lang="en"><strong>The “overflow rate” is not measured mass leakage.</strong> It is <code>nRT/(P_atm V_cell)−1</code>: an equivalent-volume deviation at 1 atm, or a relative pressure deviation at fixed cell volume. No isobaric constraint or pressure projection is applied. Non-uniform-grid exchange, heating, and reaction-driven mole changes can all amplify it.</p>
+          </div>
+        </div>
+        <ul class="limit-grid">
+          <li><strong>固定体积 Euler 网格</strong><span>Fixed-volume mesh; not a high-fidelity, fully conservative multiphysics solver.</span></li>
+          <li><strong>轴对称假设</strong><span>No three-dimensional asymmetry, flickering, or associated instabilities.</span></li>
+          <li><strong>简化六反应化学</strong><span>Not detailed kinetics; no quantitative ignition, emissions, or soot prediction.</span></li>
+          <li><strong>简化输运与速度场</strong><span>Instructional transport and buoyancy treatment; not a full Navier–Stokes solution.</span></li>
+          <li><strong>简化辐射</strong><span>No detailed spectral or full directional radiative-transfer solution.</span></li>
+          <li><strong>非均匀网格与有限分辨率</strong><span>Mesh choice affects numerical diffusion, gradients, and boundary behavior.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="start" aria-labelledby="start-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="start-title">直接用浏览器打开<span class="en" lang="en">No install. No build. No server.</span></h2>
+          <p>建议使用较新版本的 Chrome 或 Edge，并保留完整目录结构。<span lang="en">A recent Chrome or Edge browser is recommended.</span></p>
+        </div>
+        <div class="start-grid">
+          <article class="start-card">
+            <h3>本地文件<span lang="en">Open locally</span></h3>
+            <p>下载完整仓库，双击根目录的 <code>index.html</code>；也可直接打开任一中文 HTML 材料。无需安装运行时或依赖包。</p>
+            <p lang="en">Download the repository and open <code>index.html</code>, or open any Chinese HTML document directly.</p>
+            <a class="text-link" href="zh/candle-simulation-student.html">从学生仿真开始 →</a>
+          </article>
+          <article class="start-card">
+            <h3>GitHub Pages<span lang="en">Use the hosted portal</span></h3>
+            <p>仓库发布并启用 Pages 后，可通过项目入口在线使用全部中英文材料。</p>
+            <p lang="en">After publication and Pages setup, the hosted portal provides all Chinese and English documents.</p>
+            <a class="text-link" href="https://neo805.github.io/candle-flame-lab/" target="_blank" rel="noopener noreferrer">项目 Pages 地址 ↗</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing" aria-labelledby="contribute-title">
+      <div class="wrap closing-inner">
+        <div>
+          <h2 id="contribute-title">具体的问题与改进，欢迎讨论。<span class="en" lang="en">Focused issues and pull requests are welcome.</span></h2>
+          <p>欢迎可复现的缺陷、说明或翻译纠错，以及无障碍和课堂使用的具体改进。原教学活动与中文材料已完成。<br><span lang="en">Please include browser details and reproduction steps for defects, and teaching assumptions for model changes.</span></p>
+        </div>
+        <div class="closing-actions">
+          <a class="button button-secondary" href="https://github.com/neo805/candle-flame-lab/issues" target="_blank" rel="noopener noreferrer">提交 Issue ↗</a>
+          <a class="button button-primary" href="https://github.com/neo805/candle-flame-lab" target="_blank" rel="noopener noreferrer">查看仓库 ↗</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <p>© 2026 neo805 · <span lang="en">Simplified teaching model; not for quantitative research or safety prediction.</span></p>
+      <div class="footer-links">
+        <a href="README.zh-CN.md">中文 README</a>
+        <a href="README.en.md">English README</a>
+        <a href="LICENSE">MIT License</a>
+        <a href="https://github.com/neo805/candle-flame-lab" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
